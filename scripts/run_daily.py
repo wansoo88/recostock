@@ -30,6 +30,12 @@ from models.inference import (
 )
 from report.builder import build_report
 from bot.notifier import send_daily_signal
+from paper.tracker import (
+    append_and_save as paper_append_and_save,
+    close_positions as paper_close_positions,
+    load_trades as paper_load_trades,
+    open_positions as paper_open_positions,
+)
 from signals.generator import (
     Signal,
     compute_expectancy,
@@ -188,6 +194,23 @@ async def main() -> None:
                         )
 
                 log.info("%d valid signal(s) after expectancy gate", len(signals))
+
+            # ── Paper trading update (Phase 4, Friday-only rebalance) ─────────
+            if phase >= 4:
+                today_ts = pd.Timestamp(today)
+                is_friday = today_ts.dayofweek == 4
+                paper_trades = paper_load_trades()
+
+                if is_friday:
+                    # Close last week's open positions at today's close
+                    paper_trades = paper_close_positions(paper_trades, today_ts, latest_close)
+                    # Open new positions for valid signals
+                    new_rows = paper_open_positions(signals, today_ts, latest_close)
+                    paper_trades = paper_append_and_save(paper_trades, new_rows)
+                    if new_rows.empty:
+                        log.info("Paper: no valid signals to open today (%s)", today)
+                else:
+                    log.info("Paper: not Friday (%s), skipping rebalance", today)
 
     # ── Report ────────────────────────────────────────────────────────────────
     report_path = build_report(signals, regime, today)

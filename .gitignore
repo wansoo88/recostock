@@ -11,9 +11,10 @@ dist/
 build/
 .pytest_cache/
 
-# Raw data — large, re-downloadable; logs ARE committed
+# Raw data — large, re-downloadable
 data/raw/
-*.parquet
+# Parquet in raw only; data/logs/ and data/paper/ are committed
+data/raw/*.parquet
 
 # Secrets
 .env
