@@ -182,14 +182,18 @@ h4{{margin:12px 0 8px;font-size:.9rem;color:#475569}}
 
 _ORDER_GUIDE = """\
 <div class="order-box">
-  <h4>주문 방법 (토스증권)</h4>
+  <h4>주문 방법 (토스증권 권장)</h4>
   <ol>
     <li>시그널 확인 후 <b>시장가 매수</b> (빠른 체결 우선)</li>
-    <li>매수 직후 <b>지정가 매도</b> 설정 — 익절가(TP) 입력</li>
+    <li>매수 직후 <b>지정가 매도</b> 설정 — 익절가(TP) 입력 (GTC)</li>
     <li><b>조건부 주문</b>으로 손절가(SL) 설정</li>
-    <li>TP/SL 미체결 시 <b>3:45 PM ET 이전 시장가 청산</b> (당일 의무 청산)</li>
+    <li>TP/SL 미체결 시 → <b>LOC(Limit on Close) 매도 주문</b> 설정<br>
+        <small style="color:#6b7280">LOC는 4:00 PM ET 종가 자동 체결 — 잠자리 들기 전에 걸어두면 당일 청산 보장</small></li>
   </ol>
-  <p style="margin-top:8px;color:#6b7280">LOC(Limit on Close) 주문은 토스증권 미지원 → 3:45 PM ET 수동 시장가 청산으로 대체</p>
+  <p style="margin-top:8px;font-size:.82rem;color:#6b7280">
+    ※ LOC 주문 설정 방법: 토스증권 앱 → 매도 → 주문 유형 → LOC 선택 → 수량 입력<br>
+    ※ TP/SL 체결 시 LOC는 자동 취소되지 않으므로 TP/SL 체결 확인 후 LOC 수동 취소 필요
+  </p>
 </div>
 """
 

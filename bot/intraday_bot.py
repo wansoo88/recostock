@@ -145,8 +145,11 @@ async def signal_poll_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         _eod_alerted = True
         await context.bot.send_message(
             chat_id=chat_id,
-            text="⏰ [3:45 PM ET] 장 마감 15분 전 — 보유 포지션 전량 청산하세요.\n"
-                 "/positions 에서 버튼으로 청산 처리하세요.",
+            text="⏰ [3:45 PM ET] 장 마감 15분 전\n"
+                 "• LOC 주문 미설정 시 → 지금 시장가 청산\n"
+                 "• LOC 주문 설정된 경우 → 4:00 PM ET 자동 체결 대기\n"
+                 "• TP/SL 체결 확인 후 LOC 취소 여부 확인\n"
+                 "/positions 에서 버튼으로 청산 기록하세요.",
         )
         return
 
@@ -228,19 +231,21 @@ async def handle_buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     # Order guide (LOC order recommendation)
     if sig.direction == 1:
         order_guide = (
-            f"주문 방법 (토스증권 권장):\n"
+            f"주문 방법 (토스증권):\n"
             f"  1. {sig.action_ticker} 시장가 매수 @ ${sig.price:.2f}\n"
-            f"  2. 익절 지정가 매도 설정: ${sig.tp:.2f} (+{tp_pct:.1f}%)\n"
-            f"  3. 손절 조건부 주문: ${sig.sl:.2f} (-{sl_pct:.1f}%)\n"
-            f"  4. 익절/손절 미체결 시 3:45PM ET 시장가 매도"
+            f"  2. 지정가 매도(TP): ${sig.tp:.2f} (+{tp_pct:.1f}%)\n"
+            f"  3. 조건부 손절(SL): ${sig.sl:.2f} (-{sl_pct:.1f}%)\n"
+            f"  4. LOC 매도 주문 설정 → 4:00 PM ET 자동 종가 청산\n"
+            f"     (TP/SL 체결 시 LOC 수동 취소 필요)"
         )
     else:
         order_guide = (
-            f"주문 방법 (토스증권 권장):\n"
+            f"주문 방법 (토스증권):\n"
             f"  1. {sig.action_ticker}(인버스) 시장가 매수 @ ${sig.price:.2f}\n"
-            f"  2. 익절 지정가 매도: ${sig.tp:.2f} (+{tp_pct:.1f}%)\n"
-            f"  3. 손절 조건부 주문: ${sig.sl:.2f} (-{sl_pct:.1f}%)\n"
-            f"  4. 미체결 시 3:45PM ET 시장가 매도"
+            f"  2. 지정가 매도(TP): ${sig.tp:.2f} (+{tp_pct:.1f}%)\n"
+            f"  3. 조건부 손절(SL): ${sig.sl:.2f} (-{sl_pct:.1f}%)\n"
+            f"  4. LOC 매도 주문 설정 → 4:00 PM ET 자동 종가 청산\n"
+            f"     (TP/SL 체결 시 LOC 수동 취소 필요)"
         )
 
     text = (
