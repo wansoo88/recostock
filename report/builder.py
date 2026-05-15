@@ -11,7 +11,7 @@ import logging
 from datetime import date
 from pathlib import Path
 
-from signal.generator import Signal
+from signals.generator import Signal
 
 log = logging.getLogger(__name__)
 
