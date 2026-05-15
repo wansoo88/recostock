@@ -1,14 +1,13 @@
 """Telegram one-way push notification.
 
-Single message per day: summary text + GitHub Pages report link.
-No command handling (no persistent process in GitHub Actions).
-양방향 명령어는 OCI 상시 서버 이전 후 구현 예정.
+Daily batch: send_daily_signal (GitHub Actions)
+Intraday:   send_intraday_alert, send_eod_close_alert (run_intraday.py local loop)
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, datetime
 
 log = logging.getLogger(__name__)
 
@@ -60,3 +59,64 @@ async def send_daily_signal(
     message = "\n".join(lines)
     await bot.send_message(chat_id=chat_id, text=message)
     log.info("Telegram sent for %s", report_date)
+
+
+async def send_intraday_alert(
+    bot_token: str,
+    chat_id: str,
+    changes: list,   # list[tuple[IntraSignal | None, IntraSignal]]
+    now: datetime,
+) -> None:
+    """Send Telegram alert when intraday signal direction changes."""
+    try:
+        import telegram
+    except ImportError:
+        log.error("python-telegram-bot not installed")
+        return
+
+    bot = telegram.Bot(token=bot_token)
+    time_str = now.strftime("%H:%M ET")
+
+    lines = [f"[{time_str}] 인트라데이 시그널 변경"]
+    for prev_sig, curr_sig in changes:
+        prev_label = prev_sig.action_label if prev_sig else "FLAT"
+        arrow = "→"
+        regime_note = f"  VIX={curr_sig.vix:.1f} [{curr_sig.regime}]" if curr_sig.vix else ""
+
+        if curr_sig.direction == 1:
+            icon = "🟢"
+            action = f"{curr_sig.ticker} 매수"
+        elif curr_sig.direction == -1:
+            icon = "🔴"
+            action = f"{curr_sig.action_ticker} 매수 ({curr_sig.ticker} SHORT 포지션)"
+        else:
+            icon = "⬜"
+            action = f"{curr_sig.ticker} 청산 (FLAT)"
+
+        lines.append(
+            f"{icon} {curr_sig.ticker}: {prev_label} {arrow} {curr_sig.action_label}"
+            f"  |  현재가 ${curr_sig.price}  VWAP ${curr_sig.vwap}"
+            f"  RSI {curr_sig.rsi:.1f}"
+        )
+        if curr_sig.direction != 0:
+            lines.append(f"   → {action}")
+        if regime_note and curr_sig.direction != 0:
+            lines.append(f"  {regime_note}")
+
+    lines.append("⚠️ 수동 진입 · 3:45PM ET 전 반드시 청산")
+    await bot.send_message(chat_id=chat_id, text="\n".join(lines))
+    log.info("Intraday alert sent: %d change(s)", len(changes))
+
+
+async def send_eod_close_alert(bot_token: str, chat_id: str) -> None:
+    """3:45 PM ET force-close reminder."""
+    try:
+        import telegram
+    except ImportError:
+        return
+    bot = telegram.Bot(token=bot_token)
+    await bot.send_message(
+        chat_id=chat_id,
+        text="⏰ [3:45 PM ET] 장 마감 15분 전 — 당일 보유 포지션 전량 청산하세요.",
+    )
+    log.info("EOD close alert sent")
