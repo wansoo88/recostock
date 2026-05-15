@@ -50,9 +50,12 @@ async def main() -> None:
     log.info("Starting daily signal pipeline — phase=%d leverage_ok=%s", phase, leverage_ok)
 
     # ── Data collection ───────────────────────────────────────────────────────
-    universe = get_active_universe(phase, leverage_ok)
-    tickers = [e.ticker for e in universe]
-    log.info("Universe: %d ETFs — %s", len(tickers), tickers)
+    # Data is always collected for the full Phase 4 universe regardless of current phase.
+    # Signal generation is separately gated by phase below.
+    DATA_PHASE = 4
+    data_universe = get_active_universe(DATA_PHASE, leverage_education_done=False)
+    tickers = [e.ticker for e in data_universe]
+    log.info("Collecting data for %d ETFs — %s", len(tickers), tickers)
 
     ohlcv = fetch_etf_ohlcv(tickers)
     save_parquet(ohlcv, "etf_ohlcv")

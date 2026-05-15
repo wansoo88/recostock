@@ -24,6 +24,8 @@ def fetch_etf_ohlcv(tickers: list[str], years: int = config.HISTORY_YEARS) -> pd
 
     Strictly excludes today's incomplete bar so features never see future data.
     """
+    if not tickers:
+        raise ValueError("tickers list is empty — check universe phase configuration")
     end = date.today()
     start = end - timedelta(days=years * 365)
     df = yf.download(
