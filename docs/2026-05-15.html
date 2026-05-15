@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETF 시그널 리포트</title>
+<style>
+  :root { --bg: #0f1117; --surface: #1a202c; --border: #2d3748; --text: #e2e8f0; --muted: #718096; --green: #48bb78; --red: #fc8181; --amber: #f6ad55; --blue: #63b3ed; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+  h1 { color: var(--blue); font-size: 22px; margin-bottom: 4px; }
+  .date { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+  .regime-strip { background: var(--surface); border-radius: 10px; padding: 14px 20px; display: flex; gap: 32px; margin-bottom: 20px; flex-wrap: wrap; }
+  .regime-item .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .regime-item .value { font-size: 20px; font-weight: 700; margin-top: 2px; }
+  .section-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 24px 0 10px; }
+  .signal-card { background: var(--surface); border-radius: 10px; padding: 16px; margin-bottom: 12px; border-left: 4px solid var(--green); }
+  .signal-card.inverse { border-left-color: var(--red); }
+  .signal-card.leverage { border-left-color: var(--amber); }
+  .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .ticker { font-size: 22px; font-weight: 700; }
+  .etf-name { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .dir-badge { font-size: 12px; padding: 3px 10px; border-radius: 5px; font-weight: 600; white-space: nowrap; }
+  .long-badge { background: #276749; color: #9ae6b4; }
+  .short-badge { background: #742a2a; color: #fc8181; }
+  .lev-badge { background: #7b4f12; color: #fbd38d; }
+  .levels { display: flex; gap: 24px; margin-bottom: 12px; }
+  .level .lbl { font-size: 11px; color: var(--muted); }
+  .level .val { font-size: 17px; font-weight: 600; margin-top: 2px; }
+  .stats { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  .stats strong { color: var(--text); }
+  .factors { margin-top: 8px; }
+  .factor-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 12px; color: var(--muted); }
+  .factor-name { width: 110px; flex-shrink: 0; }
+  .bar-track { flex: 1; background: var(--border); border-radius: 4px; height: 7px; }
+  .bar-fill { height: 100%; border-radius: 4px; background: var(--blue); }
+  .factor-val { width: 48px; text-align: right; color: var(--text); }
+  .no-signal { text-align: center; color: var(--muted); padding: 48px 0; font-size: 15px; }
+  .disclaimer { font-size: 12px; color: #4a5568; margin-top: 36px; border-top: 1px solid var(--border); padding-top: 16px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<h1>📊 ETF 시그널 리포트</h1>
+<div class="date" id="rpt-date"></div>
+
+<div class="regime-strip">
+  <div class="regime-item"><div class="label">레짐</div><div class="value" id="rpt-regime">—</div></div>
+  <div class="regime-item"><div class="label">노출도</div><div class="value" id="rpt-exposure">—</div></div>
+  <div class="regime-item"><div class="label">시그널 수</div><div class="value" id="rpt-count">—</div></div>
+  <div class="regime-item"><div class="label">종합 기대값</div><div class="value" id="rpt-expectancy">—</div></div>
+</div>
+
+<div id="core-section"></div>
+<div id="leverage-section"></div>
+
+<div class="disclaimer">
+  ⚠️ 이 리포트는 참고용이며 투자 권유가 아닙니다.<br>
+  모든 매매는 사용자가 직접 수동 실행합니다. 진입가 미충족 시 미진입.<br>
+  레버리지 ETF는 당일청산 한정, 신뢰도 최상위 버킷에서만 활성화됩니다.<br>
+  표시된 적중률·기대값은 백테스트 기준이며 미래 수익을 보장하지 않습니다.
+</div>
+
+<script>
+const REPORT = {
+  "date": "2026-05-15",
+  "regime": {
+    "label": "neutral",
+    "exposure": 1.0
+  },
+  "signals": []
+};
+
+(function () {
+  if (typeof REPORT === 'undefined') {
+    document.getElementById('core-section').innerHTML =
+      '<div class="no-signal">데이터 없음 — Actions 파이프라인 확인 필요</div>';
+    return;
+  }
+
+  document.getElementById('rpt-date').textContent = REPORT.date;
+  document.getElementById('rpt-regime').textContent = REPORT.regime.label || '—';
+  document.getElementById('rpt-exposure').textContent =
+    typeof REPORT.regime.exposure === 'number' ? REPORT.regime.exposure.toFixed(2) + '×' : '—';
+  document.getElementById('rpt-count').textContent = REPORT.signals.length;
+
+  const avgExp = REPORT.signals.length
+    ? REPORT.signals.reduce((s, x) => s + x.expectancy, 0) / REPORT.signals.length
+    : 0;
+  const expEl = document.getElementById('rpt-expectancy');
+  expEl.textContent = (avgExp >= 0 ? '+' : '') + (avgExp * 100).toFixed(2) + '%';
+  expEl.style.color = avgExp >= 0 ? 'var(--green)' : 'var(--red)';
+
+  const coreSignals = REPORT.signals.filter(s => s.leverage === 1);
+  const leverageSignals = REPORT.signals.filter(s => s.leverage > 1);
+
+  const coreEl = document.getElementById('core-section');
+  const levEl = document.getElementById('leverage-section');
+
+  if (!REPORT.signals.length) {
+    coreEl.innerHTML = '<div class="no-signal">오늘 유효 시그널 없음 (expectancy ≤ 0)</div>';
+    return;
+  }
+
+  if (coreSignals.length) {
+    coreEl.innerHTML = '<div class="section-title">코어 · 섹터 시그널</div>';
+    coreSignals.forEach(s => coreEl.insertAdjacentHTML('beforeend', renderCard(s)));
+  }
+  if (leverageSignals.length) {
+    levEl.innerHTML = '<div class="section-title">⚡ 레버리지 시그널 (최상위 버킷 한정)</div>';
+    leverageSignals.forEach(s => levEl.insertAdjacentHTML('beforeend', renderCard(s)));
+  }
+})();
+
+function renderCard(s) {
+  const isInverse = s.dir === 'short';
+  const isLev = s.leverage > 1;
+  const cardCls = isLev ? 'leverage' : (isInverse ? 'inverse' : '');
+  const badgeCls = isLev ? 'lev-badge' : (isInverse ? 'short-badge' : 'long-badge');
+  const dirLabel = isLev
+    ? `⚡ ${isInverse ? 'INVERSE' : 'LONG'} ${s.leverage}x`
+    : (isInverse ? '↓ INVERSE' : '↑ LONG');
+
+  const factorRows = Object.entries(s.factors || {})
+    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+    .slice(0, 5)
+    .map(([k, v]) => {
+      const pct = Math.min(Math.abs(v) * 100, 100).toFixed(1);
+      return `<div class="factor-row">
+        <span class="factor-name">${k}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+        <span class="factor-val">${(v * 100).toFixed(1)}%</span>
+      </div>`;
+    }).join('');
+
+  return `<div class="signal-card ${cardCls}">
+    <div class="card-header">
+      <div>
+        <div class="ticker">${s.ticker}</div>
+        <div class="etf-name">${s.name || ''}</div>
+      </div>
+      <span class="dir-badge ${badgeCls}">${dirLabel}</span>
+    </div>
+    <div class="levels">
+      <div class="level"><div class="lbl">진입</div><div class="val">$${s.entry.toFixed(2)}</div></div>
+      <div class="level"><div class="lbl">익절 (TP)</div><div class="val" style="color:var(--green)">$${s.tp.toFixed(2)}</div></div>
+      <div class="level"><div class="lbl">손절 (SL)</div><div class="val" style="color:var(--red)">$${s.sl.toFixed(2)}</div></div>
+    </div>
+    <div class="stats">
+      <span>적중률 <strong>${(s.winrate * 100).toFixed(1)}%</strong></span>
+      <span>표본 <strong>${s.sampleN}일</strong> (CI: ${(s.ci[0]*100).toFixed(1)}%–${(s.ci[1]*100).toFixed(1)}%)</span>
+      <span>손익비 <strong>${s.payoff.toFixed(2)}</strong></span>
+      <span>기대값 <strong style="color:${s.expectancy>=0?'var(--green)':'var(--red)'}">
+        ${(s.expectancy*100).toFixed(2)}%</strong></span>
+      <span>신뢰도 <strong>${(s.confidence*100).toFixed(0)}%</strong></span>
+    </div>
+    ${factorRows ? `<div class="factors">${factorRows}</div>` : ''}
+  </div>`;
+}
+</script>
+</body>
+</html>
