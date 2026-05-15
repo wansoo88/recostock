@@ -1,0 +1,49 @@
+name: Daily ETF Signal
+
+on:
+  # US market closes 16:00 ET = 21:00 UTC (standard) / 20:00 UTC (DST)
+  # Run both crons so neither DST boundary is missed
+  schedule:
+    - cron: "30 20 * * 1-5"   # 20:30 UTC — covers DST (EDT, UTC-4)
+    - cron: "30 21 * * 1-5"   # 21:30 UTC — covers standard (EST, UTC-5)
+  workflow_dispatch:            # Allow manual trigger for testing
+
+concurrency:
+  group: daily-signal
+  cancel-in-progress: false     # Never cancel a running pipeline
+
+jobs:
+  generate-signal:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write           # For git push of signal logs + docs/
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run signal pipeline
+        env:
+          SYSTEM_PHASE: ${{ vars.SYSTEM_PHASE || '0' }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          LEVERAGE_EDUCATION_DONE: ${{ secrets.LEVERAGE_EDUCATION_DONE || 'false' }}
+          GITHUB_PAGES_URL: ${{ vars.GITHUB_PAGES_URL }}
+        run: python scripts/run_daily.py
+
+      - name: Commit signal log and report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/logs/ docs/
+          git diff --staged --quiet || git commit -m "signal: $(date -u +%Y-%m-%d) [skip ci]"
+          git push

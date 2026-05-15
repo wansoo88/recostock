@@ -1,0 +1,17 @@
+# Full ML stack for local development
+-r requirements.txt
+
+# Macro data
+fredapi>=0.5.1
+
+# ML models (Phase 3)
+lightgbm>=4.3.0
+torch>=2.2.0          # for GRU model
+
+# Backtesting (Phase 2-3)
+vectorbt>=0.26.2
+# Qlib: pip install pyqlib  (complex deps, install separately)
+
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
