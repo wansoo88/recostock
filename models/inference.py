@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+import config
 from models.train_lgbm import build_feature_matrix
 
 log = logging.getLogger(__name__)
@@ -20,7 +21,9 @@ WEIGHTS_DIR = Path("models/weights")
 PROBA_HISTORY_PATH = Path("data/logs/proba_history.parquet")
 PROBA_HISTORY_DAYS = 20   # keep last N days of raw probabilities for EMA
 EMA_SPAN = 5
-ROLLING_WINDOW = 60       # days for per-ETF winrate/payoff stats
+ROLLING_WINDOW = 60       # trading days for per-ETF rolling stats (~12 Fridays, responsive)
+HOLD_DAYS = 5             # weekly hold: Friday-to-Friday
+MIN_ACTIVE_FRIDAYS = 4    # minimum Friday signal activations for reliable stats
 
 
 # ── Model loading ─────────────────────────────────────────────────────────────
@@ -92,6 +95,7 @@ def score_today(
     history_with_today = append_today_proba(proba_history, raw_proba)
     ema_proba = history_with_today.ewm(span=EMA_SPAN).mean().iloc[-1]
 
+    threshold = config.SIGNAL_THRESHOLD
     results: dict[str, dict] = {}
     for ticker in raw_proba.index:
         raw = float(raw_proba[ticker])
@@ -99,7 +103,7 @@ def score_today(
         results[ticker] = {
             "raw_proba": round(raw, 4),
             "ema_proba": round(ema, 4),
-            "signal": 1 if ema >= 0.53 else 0,
+            "signal": 1 if ema >= threshold else 0,
         }
     return results, raw_proba
 
@@ -110,11 +114,11 @@ def compute_rolling_stats(
     proba_history: pd.DataFrame,
     window: int = ROLLING_WINDOW,
 ) -> pd.DataFrame:
-    """Per-ETF rolling backtest stats over the last `window` closed trading days.
+    """Per-ETF rolling stats: Friday-signal → 5-day (weekly) forward returns.
 
-    Includes model predictions on historical window → compares with realized returns.
-    Returns DataFrame indexed by ticker with columns:
-        winrate, avg_win, avg_loss, payoff, sample_n
+    Measures what actually happens in paper trading: enter at Friday close,
+    exit next Friday close. Uses last `window` trading days (~window/5 Fridays).
+    Returns DataFrame indexed by ticker with: winrate, avg_win, avg_loss, payoff, sample_n
     """
     model = _load_model()
     X = build_feature_matrix(close_df, vix_df)
@@ -122,31 +126,42 @@ def compute_rolling_stats(
         return pd.DataFrame()
 
     dates = sorted(X.index.get_level_values("date").unique())
-    # Exclude today: we don't yet have realized return for today
-    hist_dates = dates[-(window + 1):-1] if len(dates) > window + 1 else dates[:-1]
+    # Need window + HOLD_DAYS extra days so the last Friday has a realized exit
+    needed = window + HOLD_DAYS + 1
+    hist_dates = dates[-needed:-HOLD_DAYS] if len(dates) > needed else dates[:-HOLD_DAYS]
     if not hist_dates:
         return pd.DataFrame()
 
-    hist_set = set(hist_dates)
-    X_hist = X[X.index.get_level_values("date").isin(hist_set)]
+    # Compute EMA-smoothed signal over hist window (need some warm-up, use full range)
+    warmup_start = max(0, len(dates) - needed - EMA_SPAN * 5)
+    warmup_dates = set(dates[warmup_start:-HOLD_DAYS])
+    X_hist = X[X.index.get_level_values("date").isin(warmup_dates)]
     proba_arr = model.predict_proba(X_hist)[:, 1]
     proba_s = pd.Series(proba_arr, index=X_hist.index)
 
-    # EMA-5 smoothing on the historical window
     proba_df = proba_s.unstack(level=1)
     smooth = proba_df.ewm(span=EMA_SPAN).mean()
 
-    # Forward returns (1-day) for this window
-    fwd_ret = close_df.pct_change().shift(-1).reindex(hist_dates)
+    # Only evaluate on Fridays in the actual hist window
+    hist_set = set(hist_dates)
+    friday_dates = [d for d in hist_dates if pd.Timestamp(d).dayofweek == 4]
+    if not friday_dates:
+        return pd.DataFrame()
+
+    # 5-day forward return: enter Friday close, exit next Friday close
+    fwd_ret_5d = close_df.pct_change(HOLD_DAYS).shift(-HOLD_DAYS)
 
     rows: list[dict] = []
     for ticker in smooth.columns:
-        if ticker not in fwd_ret.columns:
+        if ticker not in fwd_ret_5d.columns:
             continue
-        sig = smooth[ticker]
-        ret = fwd_ret[ticker].reindex(sig.index).dropna()
-        active_idx = sig[sig >= 0.53].index.intersection(ret.index)
-        if len(active_idx) < 10:
+        sig = smooth[ticker].reindex(friday_dates).dropna()
+        ret = fwd_ret_5d[ticker].reindex(friday_dates).dropna()
+        common = sig.index.intersection(ret.index)
+        if common.empty:
+            continue
+        active_idx = common[sig.reindex(common) >= config.SIGNAL_THRESHOLD]
+        if len(active_idx) < MIN_ACTIVE_FRIDAYS:
             continue
 
         r = ret.loc[active_idx]
@@ -154,11 +169,10 @@ def compute_rolling_stats(
         losses = r[r <= 0]
 
         winrate = len(wins) / len(r)
-        avg_win = float(wins.mean()) if len(wins) > 0 else 0.005
-        avg_loss = float(abs(losses.mean())) if len(losses) > 0 else 0.005
-        # Ensure minimum viable levels (avoid division by zero / degenerate TP/SL)
-        avg_win = max(avg_win, 0.003)
-        avg_loss = max(avg_loss, 0.002)
+        avg_win = float(wins.mean()) if len(wins) > 0 else 0.008
+        avg_loss = float(abs(losses.mean())) if len(losses) > 0 else 0.006
+        avg_win = max(avg_win, 0.004)
+        avg_loss = max(avg_loss, 0.003)
         payoff = avg_win / avg_loss
 
         rows.append({

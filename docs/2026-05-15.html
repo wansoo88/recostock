@@ -36,6 +36,15 @@
   .bar-fill { height: 100%; border-radius: 4px; background: var(--blue); }
   .factor-val { width: 48px; text-align: right; color: var(--text); }
   .no-signal { text-align: center; color: var(--muted); padding: 48px 0; font-size: 15px; }
+  .paper-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .paper-stat { background: var(--surface); border-radius: 8px; padding: 12px 14px; }
+  .paper-stat .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .paper-stat .val { font-size: 18px; font-weight: 700; margin-top: 3px; }
+  .trade-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .trade-table th { text-align: left; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .trade-table td { padding: 5px 8px; border-bottom: 1px solid #1a202c; }
+  .trade-table tr:last-child td { border-bottom: none; }
+  .pos { color: var(--green); } .neg { color: var(--red); }
   .disclaimer { font-size: 12px; color: #4a5568; margin-top: 36px; border-top: 1px solid var(--border); padding-top: 16px; line-height: 1.6; }
 </style>
 </head>
@@ -53,6 +62,7 @@
 
 <div id="core-section"></div>
 <div id="leverage-section"></div>
+<div id="paper-section"></div>
 
 <div class="disclaimer">
   ⚠️ 이 리포트는 참고용이며 투자 권유가 아닙니다.<br>
@@ -69,7 +79,49 @@ const REPORT = {
     "exposure": 1.0,
     "vix": 17.260000228881836
   },
-  "signals": []
+  "signals": [
+    {
+      "ticker": "DIA",
+      "name": "SPDR Dow Jones",
+      "dir": "long",
+      "leverage": 1,
+      "entry": 500.8,
+      "tp": 508.0916,
+      "sl": 494.5801,
+      "winrate": 0.5714,
+      "sampleN": 21,
+      "ci": [
+        0.3655,
+        0.7553
+      ],
+      "payoff": 1.172,
+      "expectancy": 0.0005,
+      "confidence": 0.595,
+      "factors": {}
+    }
+  ],
+  "paper": {
+    "sharpe": 0.4174,
+    "mdd": -0.2634,
+    "total_return": 0.2934,
+    "n_trades": 773,
+    "n_weeks": 237,
+    "winrate": 0.5602,
+    "avg_win": 0.01926,
+    "avg_loss": 0.0193,
+    "payoff": 0.998,
+    "weeks_elapsed": 290
+  },
+  "paperOpen": [
+    {
+      "open_date": "2026-05-15",
+      "ticker": "DIA",
+      "entry_price": 500.79998779296875,
+      "ema_proba": 0.5954,
+      "winrate": 0.5714,
+      "payoff": 1.172
+    }
+  ]
 };
 
 (function () {
@@ -110,6 +162,44 @@ const REPORT = {
   if (leverageSignals.length) {
     levEl.innerHTML = '<div class="section-title">⚡ 레버리지 시그널 (최상위 버킷 한정)</div>';
     leverageSignals.forEach(s => levEl.insertAdjacentHTML('beforeend', renderCard(s)));
+  }
+
+  // Paper trading section
+  const p = REPORT.paper || {};
+  const paperEl = document.getElementById('paper-section');
+  if (p.n_trades > 0) {
+    const sharpeColor = (p.sharpe || 0) >= 0.5 ? 'var(--green)' : (p.sharpe >= 0 ? 'var(--amber)' : 'var(--red)');
+    const mddColor = Math.abs(p.mdd || 0) < 0.25 ? 'var(--green)' : 'var(--red)';
+    paperEl.innerHTML = `
+      <div class="section-title">페이퍼 트레이딩 성과</div>
+      <div class="paper-grid">
+        <div class="paper-stat"><div class="lbl">누적 수익</div>
+          <div class="val ${(p.total_return||0)>=0?'pos':'neg'}">${((p.total_return||0)*100).toFixed(1)}%</div></div>
+        <div class="paper-stat"><div class="lbl">Sharpe (연환산)</div>
+          <div class="val" style="color:${sharpeColor}">${(p.sharpe||0).toFixed(3)}</div></div>
+        <div class="paper-stat"><div class="lbl">MDD</div>
+          <div class="val" style="color:${mddColor}">${((p.mdd||0)*100).toFixed(1)}%</div></div>
+        <div class="paper-stat"><div class="lbl">적중률</div>
+          <div class="val">${((p.winrate||0)*100).toFixed(1)}%</div></div>
+        <div class="paper-stat"><div class="lbl">손익비</div>
+          <div class="val">${(p.payoff||0).toFixed(2)}</div></div>
+        <div class="paper-stat"><div class="lbl">누적 거래</div>
+          <div class="val">${p.n_trades||0}건</div></div>
+      </div>`;
+
+    if ((REPORT.paperOpen || []).length) {
+      let rows = REPORT.paperOpen.map(t =>
+        `<tr><td>${t.open_date}</td><td><strong>${t.ticker}</strong></td>
+         <td>$${t.entry_price.toFixed(2)}</td>
+         <td>${(t.ema_proba*100).toFixed(0)}%</td>
+         <td>${(t.winrate*100).toFixed(0)}% / ${t.payoff.toFixed(2)}</td></tr>`).join('');
+      paperEl.insertAdjacentHTML('beforeend', `
+        <div class="section-title" style="margin-top:14px">오픈 포지션</div>
+        <table class="trade-table">
+          <tr><th>진입일</th><th>종목</th><th>진입가</th><th>신뢰도</th><th>WR / 손익비</th></tr>
+          ${rows}
+        </table>`);
+    }
   }
 })();
 

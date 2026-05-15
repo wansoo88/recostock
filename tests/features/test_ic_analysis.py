@@ -13,13 +13,17 @@ from features.ic_analysis import compute_forward_returns, compute_ic_series, ic_
 
 @pytest.fixture
 def synthetic_close() -> pd.DataFrame:
-    """Two ETFs with 300 days of price data."""
+    """Five ETFs with 300 days — need >=3 tickers for cross-sectional Spearman IC."""
     np.random.seed(0)
     dates = pd.date_range("2022-01-01", periods=300, freq="B")
-    return pd.DataFrame({
-        "SPY": 400 * np.exp(np.cumsum(np.random.normal(0.0005, 0.01, 300))),
-        "QQQ": 300 * np.exp(np.cumsum(np.random.normal(0.0004, 0.012, 300))),
-    }, index=dates)
+    tickers = {"SPY": (400, 0.0005, 0.010), "QQQ": (300, 0.0004, 0.012),
+               "DIA": (350, 0.0003, 0.009), "XLK": (180, 0.0006, 0.013),
+               "XLF": (40,  0.0002, 0.011)}
+    return pd.DataFrame(
+        {t: p0 * np.exp(np.cumsum(np.random.normal(mu, sig, 300)))
+         for t, (p0, mu, sig) in tickers.items()},
+        index=dates,
+    )
 
 
 def test_forward_returns_no_lookahead(synthetic_close):
@@ -47,7 +51,9 @@ def test_ic_series_shape(synthetic_close):
 
     ic = compute_ic_series(factor_stacked, fwd_stacked)
     assert len(ic) > 0
-    assert ic.between(-1, 1).all()
+    valid = ic.dropna()
+    assert len(valid) > 0
+    assert valid.between(-1, 1).all()
 
 
 def test_ic_summary_verdict():

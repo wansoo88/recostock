@@ -19,7 +19,13 @@ TEMPLATE_PATH = Path("report/templates/daily-signal-report-template.html")
 OUTPUT_DIR = Path("docs")  # GitHub Pages serves from docs/ on main branch
 
 
-def build_report(signals: list[Signal], regime: dict, report_date: date) -> Path:
+def build_report(
+    signals: list[Signal],
+    regime: dict,
+    report_date: date,
+    paper_metrics: dict | None = None,
+    paper_open: list[dict] | None = None,
+) -> Path:
     """Write YYYY-MM-DD.html to docs/. Returns the output path."""
     template = TEMPLATE_PATH.read_text(encoding="utf-8")
 
@@ -28,6 +34,8 @@ def build_report(signals: list[Signal], regime: dict, report_date: date) -> Path
         "date": report_date.isoformat(),
         "regime": regime,
         "signals": [_signal_to_dict(s) for s in valid_signals],
+        "paper": paper_metrics or {},
+        "paperOpen": paper_open or [],
     }
 
     injected = template.replace(

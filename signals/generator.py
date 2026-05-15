@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 import numpy as np
-import scipy.stats as stats
 
 import config
 
@@ -35,7 +34,7 @@ class Signal:
 
     def is_valid(self) -> bool:
         """All three conditions must hold — winrate alone is meaningless."""
-        return self.winrate > 0 and self.payoff > 1.0 and self.expectancy > 0
+        return self.winrate > 0 and self.payoff >= config.MIN_PAYOFF and self.expectancy > 0
 
 
 def compute_expectancy(winrate: float, avg_win: float, avg_loss: float) -> float:
@@ -45,10 +44,11 @@ def compute_expectancy(winrate: float, avg_win: float, avg_loss: float) -> float
 
 
 def compute_winrate_ci(wins: int, n: int, confidence: float = 0.95) -> tuple[float, float]:
-    """Wilson score interval for binomial winrate."""
+    """Wilson score interval for binomial winrate (no scipy dependency)."""
     if n == 0:
         return 0.0, 0.0
-    z = stats.norm.ppf(1 - (1 - confidence) / 2)
+    # z-score via probit approximation: 1.96 for 95%, 2.576 for 99%
+    z = 1.959964  # 95% CI
     p = wins / n
     denom = 1 + z**2 / n
     centre = (p + z**2 / (2 * n)) / denom

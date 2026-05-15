@@ -72,7 +72,37 @@
 </div>
 
 <script>
-/* REPORT_DATA_PLACEHOLDER */
+const REPORT = {
+  "date": "2026-05-16",
+  "regime": {
+    "label": "normal",
+    "exposure": 1.0,
+    "vix": 18.43000030517578
+  },
+  "signals": [],
+  "paper": {
+    "sharpe": 1.538,
+    "mdd": -0.4105,
+    "total_return": 2.8392,
+    "n_trades": 270,
+    "n_weeks": 155,
+    "winrate": 0.563,
+    "avg_win": 0.03618,
+    "avg_loss": 0.02785,
+    "payoff": 1.299,
+    "weeks_elapsed": 302
+  },
+  "paperOpen": [
+    {
+      "open_date": "2026-05-15",
+      "ticker": "DIA",
+      "entry_price": 500.79998779296875,
+      "ema_proba": 0.5954,
+      "winrate": 0.5714,
+      "payoff": 1.172
+    }
+  ]
+};
 
 (function () {
   if (typeof REPORT === 'undefined') {

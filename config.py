@@ -28,6 +28,8 @@ TIER2_PAPER_SHARPE_MIN = 0.5
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 IC_MIN_VIABLE = 0.01              # Below this, signal is buried by costs
+SIGNAL_THRESHOLD = 0.53           # EMA-smoothed probability gate
+MIN_PAYOFF = 1.1                  # Minimum payoff (avg_win/avg_loss) for signal validity
 LEVERAGE_CONFIDENCE_THRESHOLD = 0.80   # Empirically validated; update after Phase 5
 
 # ── Data ──────────────────────────────────────────────────────────────────────

@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import gc
 import logging
 import os
 import sys
@@ -31,11 +32,12 @@ from models.inference import (
 from report.builder import build_report
 from bot.notifier import send_daily_signal
 from paper.tracker import (
-    append_and_save as paper_append_and_save,
-    close_positions as paper_close_positions,
+    compute_metrics as paper_compute_metrics,
     load_trades as paper_load_trades,
-    open_positions as paper_open_positions,
+    rebalance_friday as paper_rebalance_friday,
+    save_trades as paper_save_trades,
 )
+from paper.tier2 import evaluate_tier2, is_phase5_ready
 from signals.generator import (
     Signal,
     compute_expectancy,
@@ -76,11 +78,20 @@ async def main() -> None:
 
     log.info("Starting daily signal pipeline — phase=%d leverage_ok=%s", phase, leverage_ok)
 
+    # ── Phase 5 Tier 2 gate check ─────────────────────────────────────────────
+    if phase >= 5:
+        t2 = evaluate_tier2(include_backfill=False)
+        if not t2["passed"]:
+            log.warning("Phase 5 active but Tier 2 gate not fully passed — "
+                        "leverage ETFs will be skipped unless leverage_ok=True and gate passed")
+        else:
+            log.info("Tier 2 gate PASSED — Phase 5 leverage ETFs eligible (if leverage_ok)")
+
     # ── Data collection ───────────────────────────────────────────────────────
     # Data is always collected for the full Phase 4 universe regardless of current phase.
     # Signal generation is separately gated by phase below.
-    DATA_PHASE = 4
-    data_universe = get_active_universe(DATA_PHASE, leverage_education_done=False)
+    DATA_PHASE = max(4, phase)
+    data_universe = get_active_universe(DATA_PHASE, leverage_education_done=leverage_ok and phase >= 5)
     tickers = [e.ticker for e in data_universe]
     log.info("Collecting data for %d ETFs — %s", len(tickers), tickers)
 
@@ -94,6 +105,11 @@ async def main() -> None:
         macro = fetch_macro(fred_key)
         for name, series in macro.items():
             save_parquet(series, f"macro_{name}")
+        del macro
+
+    # Free fetched objects before loading parquet for inference
+    del ohlcv, vix
+    gc.collect()
 
     # ── Phase 3/4: model inference + signal generation ───────────────────────
     signals: list[Signal] = []
@@ -149,6 +165,14 @@ async def main() -> None:
                         continue
 
                     meta = UNIVERSE_BY_TICKER.get(ticker)
+
+                    # Phase 5 gate: leverage ETFs need high confidence + education
+                    if meta and meta.requires_education:
+                        if not leverage_ok:
+                            continue
+                        if scores["ema_proba"] < config.LEVERAGE_CONFIDENCE_THRESHOLD:
+                            continue
+
                     entry = float(latest_close.get(ticker, 0))
                     if entry <= 0:
                         continue
@@ -195,25 +219,37 @@ async def main() -> None:
 
                 log.info("%d valid signal(s) after expectancy gate", len(signals))
 
-            # ── Paper trading update (Phase 4, Friday-only rebalance) ─────────
+            # ── Paper trading update (Phase 4, Friday carry-over rebalance) ──
             if phase >= 4:
                 today_ts = pd.Timestamp(today)
                 is_friday = today_ts.dayofweek == 4
                 paper_trades = paper_load_trades()
 
                 if is_friday:
-                    # Close last week's open positions at today's close
-                    paper_trades = paper_close_positions(paper_trades, today_ts, latest_close)
-                    # Open new positions for valid signals
-                    new_rows = paper_open_positions(signals, today_ts, latest_close)
-                    paper_trades = paper_append_and_save(paper_trades, new_rows)
-                    if new_rows.empty:
-                        log.info("Paper: no valid signals to open today (%s)", today)
+                    # Carry-over model: close exits, open new entries only
+                    paper_trades = paper_rebalance_friday(
+                        paper_trades, signals, today_ts, latest_close
+                    )
+                    paper_save_trades(paper_trades)
                 else:
                     log.info("Paper: not Friday (%s), skipping rebalance", today)
 
+    # ── Paper metrics for report ──────────────────────────────────────────────
+    paper_metrics: dict = {}
+    paper_open_list: list[dict] = []
+    if phase >= 4:
+        try:
+            _pt = paper_load_trades()
+            paper_metrics = paper_compute_metrics(_pt)
+            _open = _pt[_pt["close_date"].isna()] if not _pt.empty else _pt
+            paper_open_list = _open[["open_date", "ticker", "entry_price", "ema_proba", "winrate", "payoff"]].to_dict("records")
+        except Exception as exc:
+            log.warning("Paper metrics unavailable: %s", exc)
+
     # ── Report ────────────────────────────────────────────────────────────────
-    report_path = build_report(signals, regime, today)
+    report_path = build_report(signals, regime, today,
+                               paper_metrics=paper_metrics,
+                               paper_open=paper_open_list)
     report_url = f"{pages_base}/{report_path.name}" if pages_base else ""
 
     # ── Notify ────────────────────────────────────────────────────────────────
