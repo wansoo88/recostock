@@ -20,6 +20,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import pandas as pd
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+# Windows CP949 콘솔에서도 UTF-8 출력 가능하도록
+import sys, io
+if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf_8"):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 log = logging.getLogger(__name__)
 
 
