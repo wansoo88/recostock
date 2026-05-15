@@ -18,8 +18,12 @@ data/raw/*.parquet
 
 # Secrets
 .env
+deploy/.env
 *.key
 *.pem
+
+# Intraday trade DB (runtime, not committed)
+data/intraday_trades.db
 
 # OS
 .DS_Store

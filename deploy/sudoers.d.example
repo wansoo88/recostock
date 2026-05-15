@@ -1,0 +1,11 @@
+# Add this to /etc/sudoers.d/recostock on the Ubuntu server
+# Command: sudo visudo -f /etc/sudoers.d/recostock
+#
+# Allows the ubuntu user (GitHub Actions runner) to manage only the bot service
+# without a password — safe, minimal privilege.
+
+ubuntu ALL=(ALL) NOPASSWD: /bin/systemctl restart intraday-bot, \
+                            /bin/systemctl start intraday-bot, \
+                            /bin/systemctl stop intraday-bot, \
+                            /bin/systemctl is-active intraday-bot, \
+                            /bin/journalctl -u intraday-bot *

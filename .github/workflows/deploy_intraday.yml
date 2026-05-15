@@ -1,0 +1,46 @@
+name: Deploy Intraday Bot
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # Only redeploy when intraday-related code changes
+      - "scripts/run_intraday.py"
+      - "bot/intraday_bot.py"
+      - "data/intraday.py"
+      - "features/intraday_factors.py"
+      - "signals/intraday_generator.py"
+      - "paper/intraday_tracker.py"
+      - "report/intraday_report.py"
+      - "requirements.txt"
+  workflow_dispatch:   # Allow manual trigger from GitHub UI
+
+concurrency:
+  group: deploy-intraday
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Runs ON your Ubuntu server (self-hosted runner)
+    runs-on: self-hosted
+
+    steps:
+      - name: Pull latest code
+        run: |
+          cd /home/ubuntu/recostock
+          git fetch origin main
+          git reset --hard origin/main
+
+      - name: Update Python dependencies
+        run: |
+          /home/ubuntu/recostock/venv/bin/pip install --quiet -r /home/ubuntu/recostock/requirements.txt
+
+      - name: Restart intraday bot
+        run: |
+          sudo systemctl restart intraday-bot
+          sleep 3
+          sudo systemctl is-active --quiet intraday-bot && echo "Bot restarted OK" || echo "WARNING: bot failed to start"
+
+      - name: Show recent logs
+        run: |
+          sudo journalctl -u intraday-bot -n 20 --no-pager
