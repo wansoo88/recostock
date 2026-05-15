@@ -27,20 +27,20 @@ jobs:
     steps:
       - name: Pull latest code
         run: |
-          cd /home/ubuntu/recostock
+          cd /root/recostock
           git fetch origin main
           git reset --hard origin/main
 
       - name: Update Python dependencies
         run: |
-          /home/ubuntu/recostock/venv/bin/pip install --quiet -r /home/ubuntu/recostock/requirements.txt
+          /root/recostock/venv/bin/pip install --quiet -r /root/recostock/requirements.txt
 
       - name: Restart intraday bot
         run: |
-          sudo systemctl restart intraday-bot
+          systemctl restart intraday-bot
           sleep 3
-          sudo systemctl is-active --quiet intraday-bot && echo "Bot restarted OK" || echo "WARNING: bot failed to start"
+          systemctl is-active --quiet intraday-bot && echo "Bot restarted OK" || echo "WARNING: bot failed to start"
 
       - name: Show recent logs
         run: |
-          sudo journalctl -u intraday-bot -n 20 --no-pager
+          journalctl -u intraday-bot -n 20 --no-pager

@@ -1,9 +1,9 @@
 #!/bin/bash
-# One-time setup for Ubuntu server.
+# One-time setup for Ubuntu server (run as root).
 # Run as: bash deploy/setup_server.sh
 set -e
 
-REPO_DIR="/home/ubuntu/recostock"
+REPO_DIR="/root/recostock"
 VENV_DIR="$REPO_DIR/venv"
 SERVICE_NAME="intraday-bot"
 
@@ -24,9 +24,9 @@ if [ ! -f "$REPO_DIR/deploy/.env" ]; then
 fi
 
 # 3. systemd service
-sudo cp "$REPO_DIR/deploy/intraday.service" /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable "$SERVICE_NAME"
+cp "$REPO_DIR/deploy/intraday.service" /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable "$SERVICE_NAME"
 echo "[OK] systemd service installed"
 
 # 4. data directories
@@ -36,5 +36,5 @@ echo "[OK] Data directories created"
 echo ""
 echo "=== Next steps ==="
 echo "1. Edit deploy/.env with real Telegram credentials"
-echo "2. sudo systemctl start $SERVICE_NAME"
-echo "3. sudo journalctl -u $SERVICE_NAME -f   # watch logs"
+echo "2. systemctl start $SERVICE_NAME"
+echo "3. journalctl -u $SERVICE_NAME -f   # watch logs"
