@@ -37,7 +37,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           LEVERAGE_EDUCATION_DONE: ${{ secrets.LEVERAGE_EDUCATION_DONE || 'false' }}
-          GITHUB_PAGES_URL: ${{ vars.GITHUB_PAGES_URL }}
+          PAGES_URL: ${{ vars.PAGES_URL }}
         run: python scripts/run_daily.py
 
       - name: Commit signal log and report

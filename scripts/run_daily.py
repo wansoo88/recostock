@@ -45,7 +45,7 @@ async def main() -> None:
     fred_key = os.environ.get("FRED_API_KEY", "")
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
-    pages_base = os.environ.get("GITHUB_PAGES_URL", "")
+    pages_base = os.environ.get("PAGES_URL", "")
 
     log.info("Starting daily signal pipeline — phase=%d leverage_ok=%s", phase, leverage_ok)
 
