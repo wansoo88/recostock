@@ -2,7 +2,7 @@
 yfinance>=0.2.40
 pandas>=2.2.0
 numpy>=1.26.0
-python-telegram-bot>=21.0
+python-telegram-bot[job-queue]>=21.0
 requests>=2.31.0
 pyarrow>=15.0.0    # parquet I/O
 lightgbm>=4.0.0    # Phase 3: ML model
