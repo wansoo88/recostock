@@ -9,6 +9,10 @@ SERVICE_NAME="intraday-bot"
 
 echo "=== Recostock server setup ==="
 
+# 0. System dependencies
+apt-get update -qq
+apt-get install -y -qq python3-venv python3-pip
+
 # 1. Python venv
 if [ ! -d "$VENV_DIR" ]; then
     python3 -m venv "$VENV_DIR"
