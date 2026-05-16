@@ -70,10 +70,12 @@ def _signal_row(sig: IntraSignal) -> str:
         trade_desc = f"매수 {sig.action_ticker} (SHORT {sig.ticker})  ${sig.price:.2f}"
     tp_pct = abs(sig.tp - sig.price) / sig.price * 100
     sl_pct = abs(sig.sl - sig.price) / sig.price * 100
+    adx_str = f"ADX {sig.adx:.0f}" if not (sig.adx != sig.adx) else ""  # skip NaN
+    srsi_str = f"StochRSI {sig.stochrsi_k:.0f}" if not (sig.stochrsi_k != sig.stochrsi_k) else ""
     return (
         f"{dir_icon} {trade_desc}\n"
         f"   익절가: ${sig.tp:.2f} (+{tp_pct:.1f}%)  |  손절가: ${sig.sl:.2f} (-{sl_pct:.1f}%)\n"
-        f"   RSI {sig.rsi:.1f}  VWAP ${sig.vwap:.2f}  예상WR {sig.winrate:.0%}"
+        f"   RSI {sig.rsi:.1f}  {srsi_str}  {adx_str}  예상WR {sig.winrate:.0%}"
         f"  기대수익 {sig.exp_return:+.2%}"
     )
 

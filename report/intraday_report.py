@@ -1,7 +1,7 @@
 """Intraday HTML report builder.
 
 Generates docs/intraday-YYYY-MM-DD.html on each signal change.
-Shows 5-minute price chart (EMA5, EMA20, VWAP) + RSI + signal table.
+Shows 5-minute price/EMA/VWAP chart + RSI/StochRSI panel + ADX panel + signal table.
 Non-expert friendly: plain Korean explanations, colour-coded verdicts.
 """
 from __future__ import annotations
@@ -21,28 +21,47 @@ DOCS_DIR = Path("docs")
 
 _VERDICT_KO = {1: "LONG 매수", -1: "SHORT 인버스 매수", 0: "관망 (FLAT)"}
 _VERDICT_COLOR = {1: "#16a34a", -1: "#dc2626", 0: "#6b7280"}
+
 _REASON_LONG = [
-    ("EMA5 > EMA20", "단기 이동평균이 장기를 돌파 — 상승 추세 확인"),
+    ("EMA5 > EMA20", "단기 이동평균이 장기를 돌파 — 상승 추세 시작"),
     ("가격 > VWAP", "거래량 가중 평균가 위에 위치 — 매수세 우세"),
-    ("RSI > 52", "모멘텀 지표가 중립선 위 — 상승 탄력 있음"),
+    ("RSI > 55", "모멘텀이 중립선을 넘어 상승 탄력 확인"),
+    ("StochRSI > 50", "RSI가 최근 범위의 상위 절반 — 추세 지속 신호"),
+    ("ADX > 25", "추세 강도 충분 — 횡보가 아닌 방향성 장세"),
+    ("OBV 상승", "거래량이 상승 방향으로 누적 — 기관 매집 확인"),
+    ("거래량 평균 초과", "현재 봉 거래량이 20봉 평균 이상 — 이동 신뢰도 상승"),
+    ("ORB 구간 이후", "오전 9:30~10:00 노이즈 구간 경과 후 진입"),
 ]
 _REASON_SHORT = [
     ("EMA5 < EMA20", "단기 이동평균이 장기 아래 — 하락 추세 확인"),
     ("가격 < VWAP", "거래량 가중 평균가 아래 위치 — 매도세 우세"),
-    ("RSI < 48", "모멘텀 지표가 중립선 아래 — 하락 탄력 있음"),
+    ("RSI < 45", "모멘텀이 중립선 아래 — 하락 탄력 확인"),
+    ("StochRSI < 50", "RSI가 최근 범위의 하위 절반 — 하락 추세 지속"),
+    ("ADX > 25", "추세 강도 충분 — 방향성 하락장"),
+    ("OBV 하락", "거래량이 하락 방향으로 누적 — 기관 매도 확인"),
+    ("거래량 평균 초과", "현재 봉 거래량이 20봉 평균 이상 — 이동 신뢰도 상승"),
+    ("ORB 구간 이후", "오전 9:30~10:00 노이즈 구간 경과 후 진입"),
 ]
 
 
 def _make_chart_data(df: pd.DataFrame) -> dict:
     feat = compute_intraday_features(df)
     times = [t.strftime("%H:%M") for t in feat.index.to_pydatetime()]
+
+    def _safe(series):
+        return [None if pd.isna(v) else round(float(v), 4) for v in series]
+
     return {
         "labels": times,
-        "close": [round(float(v), 4) for v in feat["Close"]],
-        "ema5":  [round(float(v), 4) for v in feat["ema5"]],
-        "ema20": [round(float(v), 4) for v in feat["ema20"]],
-        "vwap":  [round(float(v), 4) for v in feat["vwap"]],
-        "rsi":   [round(float(v), 2) for v in feat["rsi14"]],
+        "close": _safe(feat["Close"]),
+        "ema5":  _safe(feat["ema5"]),
+        "ema20": _safe(feat["ema20"]),
+        "vwap":  _safe(feat["vwap"]),
+        "vwap_upper": _safe(feat["vwap"] + feat["vwap_sd"]),
+        "vwap_lower": _safe(feat["vwap"] - feat["vwap_sd"]),
+        "rsi":        _safe(feat["rsi14"]),
+        "stochrsi":   _safe(feat["stochrsi_k"]),
+        "adx":        _safe(feat["adx14"]),
     }
 
 
@@ -52,9 +71,12 @@ def _signal_card(sig: IntraSignal, chart_json: str) -> str:
     reasons = _REASON_LONG if sig.direction == 1 else (_REASON_SHORT if sig.direction == -1 else [])
     chart_id = f"chart_{sig.ticker}"
     rsi_id = f"rsi_{sig.ticker}"
+    adx_id = f"adx_{sig.ticker}"
 
     tp_pct = abs(sig.tp - sig.price) / sig.price * 100 if sig.tp else 0
     sl_pct = abs(sig.sl - sig.price) / sig.price * 100 if sig.sl else 0
+    adx_str = f"{sig.adx:.1f}" if sig.adx == sig.adx else "N/A"
+    srsi_str = f"{sig.stochrsi_k:.1f}" if sig.stochrsi_k == sig.stochrsi_k else "N/A"
 
     reason_rows = "".join(
         f'<tr><td class="reason-label">{r[0]}</td>'
@@ -75,24 +97,31 @@ def _signal_card(sig: IntraSignal, chart_json: str) -> str:
     <div class="price-item"><span class="label">현재가</span><span class="value">${sig.price:.2f}</span></div>
     <div class="price-item"><span class="label">VWAP</span><span class="value">${sig.vwap:.2f}</span></div>
     <div class="price-item"><span class="label">RSI(14)</span><span class="value">{sig.rsi:.1f}</span></div>
+    <div class="price-item"><span class="label">StochRSI %K</span><span class="value">{srsi_str}</span></div>
+    <div class="price-item"><span class="label">ADX(14)</span><span class="value">{adx_str} <small>(25 이상 = 추세장)</small></span></div>
     <div class="price-item"><span class="label">EMA5</span><span class="value">${sig.ema5:.2f}</span></div>
     <div class="price-item"><span class="label">EMA20</span><span class="value">${sig.ema20:.2f}</span></div>
     <div class="price-item"><span class="label">ATR(5분)</span><span class="value">${sig.atr:.3f}</span></div>
     <div class="price-item tp"><span class="label">익절가 (TP)</span><span class="value">${sig.tp:.2f} <small>(+{tp_pct:.1f}%)</small></span></div>
     <div class="price-item sl"><span class="label">손절가 (SL)</span><span class="value">${sig.sl:.2f} <small>(-{sl_pct:.1f}%)</small></span></div>
-    <div class="price-item"><span class="label">예상 적중률</span><span class="value">{sig.winrate:.0%}</span></div>
-    <div class="price-item"><span class="label">순 기대수익</span><span class="value">{sig.exp_return:+.2%}</span></div>
+    <div class="price-item"><span class="label">예상 적중률*</span><span class="value">{sig.winrate:.0%}</span></div>
+    <div class="price-item"><span class="label">순 기대수익*</span><span class="value">{sig.exp_return:+.2%}</span></div>
   </div>
+  <p style="font-size:.75rem;color:#94a3b8;margin-bottom:12px">* 미검증 추정치 — 실제 60일 백테스트로 대체 예정</p>
 
-  <h4>시그널 근거</h4>
+  <h4>시그널 근거 (전 조건 동시 충족 시에만 추천)</h4>
   <table class="reason-table">
     <thead><tr><th>조건</th><th></th><th>설명</th></tr></thead>
     <tbody>{reason_rows}</tbody>
   </table>
 
   <div class="chart-wrap">
+    <p class="chart-label">가격 차트 (종가 / EMA5 / EMA20 / VWAP ±1SD)</p>
     <canvas id="{chart_id}" height="140"></canvas>
-    <canvas id="{rsi_id}" height="60"></canvas>
+    <p class="chart-label">RSI(14) + StochRSI %K</p>
+    <canvas id="{rsi_id}" height="70"></canvas>
+    <p class="chart-label">ADX(14) — 25 이상 = 추세장</p>
+    <canvas id="{adx_id}" height="55"></canvas>
   </div>
 </div>
 <script>
@@ -102,23 +131,38 @@ def _signal_card(sig: IntraSignal, chart_json: str) -> str:
     type:'line', data:{{
       labels: d.labels,
       datasets:[
-        {{label:'종가', data:d.close, borderColor:'#1d4ed8', borderWidth:1.5, pointRadius:0, tension:0.2}},
-        {{label:'EMA5', data:d.ema5, borderColor:'#f59e0b', borderWidth:1, pointRadius:0, borderDash:[]}},
-        {{label:'EMA20', data:d.ema20, borderColor:'#ef4444', borderWidth:1, pointRadius:0, borderDash:[4,2]}},
-        {{label:'VWAP', data:d.vwap, borderColor:'#8b5cf6', borderWidth:1, pointRadius:0, borderDash:[2,2]}},
+        {{label:'종가', data:d.close, borderColor:'#1d4ed8', borderWidth:2, pointRadius:0, tension:0.2, order:1}},
+        {{label:'EMA5', data:d.ema5, borderColor:'#f59e0b', borderWidth:1.5, pointRadius:0}},
+        {{label:'EMA20', data:d.ema20, borderColor:'#ef4444', borderWidth:1.5, pointRadius:0, borderDash:[4,2]}},
+        {{label:'VWAP', data:d.vwap, borderColor:'#8b5cf6', borderWidth:1.5, pointRadius:0, borderDash:[2,2]}},
+        {{label:'VWAP+1SD', data:d.vwap_upper, borderColor:'rgba(139,92,246,0.25)', borderWidth:1, pointRadius:0, fill:false}},
+        {{label:'VWAP-1SD', data:d.vwap_lower, borderColor:'rgba(139,92,246,0.25)', borderWidth:1, pointRadius:0, fill:'-1', backgroundColor:'rgba(139,92,246,0.05)'}},
       ]
     }},
-    options:{{responsive:true, plugins:{{legend:{{position:'bottom'}}}},
+    options:{{responsive:true, plugins:{{legend:{{position:'bottom',labels:{{boxWidth:10,font:{{size:11}}}}}}}},
       scales:{{x:{{ticks:{{maxTicksLimit:8}}}}, y:{{}}}}}}
   }});
   new Chart(document.getElementById('{rsi_id}'), {{
     type:'line', data:{{
       labels: d.labels,
-      datasets:[{{label:'RSI(14)', data:d.rsi, borderColor:'#0891b2', borderWidth:1.5, pointRadius:0, fill:false}}]
+      datasets:[
+        {{label:'RSI(14)', data:d.rsi, borderColor:'#0891b2', borderWidth:1.5, pointRadius:0, fill:false}},
+        {{label:'StochRSI %K', data:d.stochrsi, borderColor:'#f97316', borderWidth:1.5, pointRadius:0, fill:false, borderDash:[3,2]}},
+      ]
     }},
-    options:{{responsive:true, plugins:{{legend:{{position:'bottom'}}}},
+    options:{{responsive:true, plugins:{{legend:{{position:'bottom',labels:{{boxWidth:10,font:{{size:11}}}}}}}},
       scales:{{x:{{ticks:{{maxTicksLimit:8}}}}, y:{{min:0,max:100,
-        grid:{{color: ctx => (ctx.tick.value===70||ctx.tick.value===30)?'rgba(239,68,68,0.4)':'rgba(0,0,0,0.05)'}}
+        grid:{{color: ctx => (ctx.tick.value===70||ctx.tick.value===30)?'rgba(239,68,68,0.3)':(ctx.tick.value===50?'rgba(0,0,0,0.15)':'rgba(0,0,0,0.04)')}}
+      }}}}}}
+  }});
+  new Chart(document.getElementById('{adx_id}'), {{
+    type:'line', data:{{
+      labels: d.labels,
+      datasets:[{{label:'ADX(14)', data:d.adx, borderColor:'#059669', borderWidth:1.5, pointRadius:0, fill:false}}]
+    }},
+    options:{{responsive:true, plugins:{{legend:{{position:'bottom',labels:{{boxWidth:10,font:{{size:11}}}}}}}},
+      scales:{{x:{{ticks:{{maxTicksLimit:8}}}}, y:{{min:0,
+        grid:{{color: ctx => ctx.tick.value===25?'rgba(239,68,68,0.4)':'rgba(0,0,0,0.04)'}}
       }}}}}}
   }});
 }})();
@@ -144,7 +188,7 @@ h1{{font-size:1.3rem;margin-bottom:4px}}
 .ticker{{font-size:1.5rem;font-weight:700}}
 .verdict{{font-size:1rem;font-weight:600}}
 .action-ticker{{font-size:.85rem;background:#f1f5f9;padding:2px 8px;border-radius:4px}}
-.price-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:16px}}
+.price-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-bottom:8px}}
 .price-item{{background:#f8fafc;border-radius:6px;padding:8px 12px}}
 .price-item.tp{{background:#dcfce7}}
 .price-item.sl{{background:#fee2e2}}
@@ -157,6 +201,7 @@ h4{{margin:12px 0 8px;font-size:.9rem;color:#475569}}
 .reason-label{{font-weight:600;white-space:nowrap}}
 .checkmark{{color:#16a34a;font-size:1.1rem;text-align:center;width:30px}}
 .chart-wrap{{margin-top:16px}}
+.chart-label{{font-size:.78rem;color:#64748b;margin:10px 0 4px;font-weight:600}}
 .order-box{{background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px;margin-bottom:16px;font-size:.85rem}}
 .order-box h4{{color:#9a3412;margin-bottom:6px}}
 .order-box ol{{padding-left:20px;line-height:1.8}}
@@ -166,6 +211,7 @@ h4{{margin:12px 0 8px;font-size:.9rem;color:#475569}}
 <body>
 <h1>인트라데이 ETF 시그널</h1>
 <div class="meta">{datetime_str}  |  VIX {vix_str}  |  레짐: {regime}</div>
+<div class="meta" style="color:#f97316">⚠️ 데이터 15분 지연 (yfinance 무료) · 예상 적중률/기대수익은 미검증 추정치</div>
 
 {order_guide_html}
 
@@ -174,7 +220,8 @@ h4{{margin:12px 0 8px;font-size:.9rem;color:#475569}}
 {no_signal_html}
 
 <div style="margin-top:24px;font-size:.75rem;color:#94a3b8">
-자동 생성 · 수동 실행 전용 · 왕복 비용 0.25% 포함 기대수익만 추천
+자동 생성 · 수동 실행 전용 · 왕복 거래비용 0.25% 포함 기대수익만 추천<br>
+시그널 조건: EMA5/20 크로스 + VWAP + RSI(55/45) + StochRSI(50) + ADX(25) + OBV방향 + 거래량 + ORB 이후
 </div>
 </body>
 </html>
@@ -191,8 +238,8 @@ _ORDER_GUIDE = """\
         <small style="color:#6b7280">LOC는 4:00 PM ET 종가 자동 체결 — 잠자리 들기 전에 걸어두면 당일 청산 보장</small></li>
   </ol>
   <p style="margin-top:8px;font-size:.82rem;color:#6b7280">
-    ※ LOC 주문 설정 방법: 토스증권 앱 → 매도 → 주문 유형 → LOC 선택 → 수량 입력<br>
-    ※ TP/SL 체결 시 LOC는 자동 취소되지 않으므로 TP/SL 체결 확인 후 LOC 수동 취소 필요
+    ※ LOC 주문: 토스증권 앱 → 매도 → 주문 유형 → LOC 선택 → 수량 입력<br>
+    ※ TP/SL 체결 시 LOC는 자동 취소되지 않으므로 체결 확인 후 LOC 수동 취소 필요
   </p>
 </div>
 """
@@ -212,11 +259,10 @@ def build_intraday_report(
     date_str = now.strftime("%Y-%m-%d")
     datetime_str = now.strftime("%Y-%m-%d %H:%M ET")
     vix_str = f"{vix:.1f}" if vix else "N/A"
-    regime = "normal"
+    regime = "정상 (normal)"
     if vix:
         regime = "공포 (fear)" if vix >= 30 else ("주의 (caution)" if vix >= 20 else "정상 (normal)")
 
-    # Sort: longs first (by score desc), then shorts, then flats
     active = [s for s in signals.values() if s.direction != 0]
     active.sort(key=lambda s: -s.score)
 
@@ -227,7 +273,11 @@ def build_intraday_report(
             chart_data = _make_chart_data(df)
             chart_json = json.dumps(chart_data)
         else:
-            chart_json = json.dumps({"labels": [], "close": [], "ema5": [], "ema20": [], "vwap": [], "rsi": []})
+            chart_json = json.dumps({
+                "labels": [], "close": [], "ema5": [], "ema20": [],
+                "vwap": [], "vwap_upper": [], "vwap_lower": [],
+                "rsi": [], "stochrsi": [], "adx": [],
+            })
         cards.append(_signal_card(sig, chart_json))
 
     cards_html = "\n".join(cards)
