@@ -26,8 +26,6 @@ from telegram.ext import (
     ContextTypes,
 )
 
-import os
-
 from data.intraday import (
     INTRADAY_TICKERS,
     fetch_5min_ohlcv,
@@ -92,7 +90,8 @@ def _build_signal_message(
         regime = "fear" if vix >= 30 else ("caution" if vix >= 20 else "normal")
     vix_str = f"VIX {vix:.1f} [{regime}]" if vix else ""
 
-    parts = [f"[{time_str}] 인트라데이 TOP5 추천  {vix_str}"]
+    parts = [f"[{time_str}] 인트라데이 TOP5 추천  {vix_str}",
+             "⚠️ 데이터 15분 지연 · 예상WR/기대수익은 미검증 추정치"]
     if longs:
         parts.append("\nLONG 추천")
         for i, s in enumerate(longs, 1):
@@ -103,7 +102,7 @@ def _build_signal_message(
             parts.append(f"{i}. {_signal_row(s)}")
     if not longs and not shorts:
         parts.append("현재 유효 시그널 없음 — FLAT")
-    parts.append("\n⚠️ 수동 진입 · 3:45PM ET 이전 반드시 청산 · LOC 주문 권장")
+    parts.append("\n수동 진입 · 3:45PM ET 이전 반드시 청산 · LOC 주문 권장")
     return "\n".join(parts)
 
 

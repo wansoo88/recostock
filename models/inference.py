@@ -23,7 +23,7 @@ PROBA_HISTORY_DAYS = 20   # keep last N days of raw probabilities for EMA
 EMA_SPAN = 5
 ROLLING_WINDOW = 60       # trading days for per-ETF rolling stats (~12 Fridays, responsive)
 HOLD_DAYS = 5             # weekly hold: Friday-to-Friday
-MIN_ACTIVE_FRIDAYS = 4    # minimum Friday signal activations for reliable stats
+MIN_ACTIVE_FRIDAYS = 8    # minimum Friday signal activations for reliable stats (4 was too few)
 
 
 # ── Model loading ─────────────────────────────────────────────────────────────

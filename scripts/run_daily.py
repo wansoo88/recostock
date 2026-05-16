@@ -130,16 +130,57 @@ async def main() -> None:
             )
             vix_df = pd.read_parquet(vix_path) if vix_path.exists() else None
 
-            # ── Regime detection from VIX level ──────────────────────────────
+            # ── Regime detection: VIX + macro overlay ────────────────────────
             if vix_df is not None and not vix_df.empty:
                 vix_latest = float(vix_df.iloc[:, 0].dropna().iloc[-1])
                 if vix_latest >= 30:
-                    regime = {"label": "fear", "exposure": 0.5, "vix": vix_latest}
+                    regime_label, exposure = "fear", 0.5
                 elif vix_latest >= 20:
-                    regime = {"label": "caution", "exposure": 0.75, "vix": vix_latest}
+                    regime_label, exposure = "caution", 0.75
                 else:
-                    regime = {"label": "normal", "exposure": 1.0, "vix": vix_latest}
-                log.info("Regime: %s (VIX=%.1f)", regime["label"], vix_latest)
+                    regime_label, exposure = "normal", 1.0
+                regime = {"label": regime_label, "exposure": exposure, "vix": vix_latest}
+
+                # Macro overlay: credit spread and yield curve can escalate regime.
+                # Credit spread (BAMLH0A0HYM2) normal ~3-4%, stress ≥5%, crisis ≥7%.
+                # Yield spread (10y-2y) inversion < -0.5% signals growth concern.
+                macro_triggers: list[str] = []
+
+                cs_path = Path("data/raw/macro_credit_spread.parquet")
+                if cs_path.exists():
+                    cs_df = pd.read_parquet(cs_path).dropna()
+                    if not cs_df.empty:
+                        cs = float(cs_df.iloc[-1, 0])
+                        regime["credit_spread"] = round(cs, 2)
+                        if cs >= 7.0 and regime["label"] != "fear":
+                            regime["label"] = "fear"
+                            regime["exposure"] = 0.5
+                            macro_triggers.append(f"credit_spread={cs:.1f}%≥7")
+                        elif cs >= 5.0 and regime["label"] == "normal":
+                            regime["label"] = "caution"
+                            regime["exposure"] = 0.75
+                            macro_triggers.append(f"credit_spread={cs:.1f}%≥5")
+
+                y10_path = Path("data/raw/macro_yield_10y.parquet")
+                y2_path = Path("data/raw/macro_yield_2y.parquet")
+                if y10_path.exists() and y2_path.exists():
+                    y10_df = pd.read_parquet(y10_path).dropna()
+                    y2_df = pd.read_parquet(y2_path).dropna()
+                    if not y10_df.empty and not y2_df.empty:
+                        yield_spread = float(y10_df.iloc[-1, 0]) - float(y2_df.iloc[-1, 0])
+                        regime["yield_spread"] = round(yield_spread, 2)
+                        if yield_spread < -0.5 and regime["label"] == "normal":
+                            regime["label"] = "caution"
+                            regime["exposure"] = 0.75
+                            macro_triggers.append(f"yield_curve={yield_spread:.2f}%")
+
+                if macro_triggers:
+                    log.info("Regime escalated by macro: %s", ", ".join(macro_triggers))
+                log.info(
+                    "Regime: %s (VIX=%.1f, exposure=%.2f, credit_spread=%s, yield_spread=%s)",
+                    regime["label"], vix_latest, regime["exposure"],
+                    regime.get("credit_spread", "n/a"), regime.get("yield_spread", "n/a"),
+                )
 
             proba_history = load_proba_history()
 

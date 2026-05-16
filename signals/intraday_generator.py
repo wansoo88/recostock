@@ -19,20 +19,22 @@ from data.intraday import CORE_TICKERS, INVERSE_PAIR, SECTOR_TICKERS
 from features.intraday_factors import compute_intraday_features
 import config
 
-RSI_LONG = 52
-RSI_SHORT = 48
-MIN_BARS = 21          # need at least 21 bars for EMA20 warm-up
+RSI_LONG = 55          # tighter: avoids noise at 50-boundary
+RSI_SHORT = 45         # tighter: avoids noise at 50-boundary
+MIN_BARS = 40          # EMA20 needs ~20 bars warm-up; 40 ensures stable VWAP too
 ATR_PERIOD = 14
 TP_ATR_MULT = 2.0      # take-profit = entry ± 2×ATR(5-min)
 SL_ATR_MULT = 1.0      # stop-loss   = entry ∓ 1×ATR(5-min)
-MIN_TP_PCT = 0.006     # floor: TP at least 0.6% from entry (covers cost + margin)
-MIN_SL_PCT = 0.003     # floor: SL at least 0.3% from entry
+# Floor math: 0.54×1.0% - 0.46×0.4% - 0.25% = +0.106%/trade (positive EV)
+# Old floor 0.6%/0.3% → 0.54×0.6 - 0.46×0.3 - 0.25 = -0.064% (negative EV, FIXED)
+MIN_TP_PCT = 0.010     # floor: TP at least 1.0% from entry
+MIN_SL_PCT = 0.004     # floor: SL at least 0.4% from entry
 
 # Conservative backtest-implied winrate for intraday rule-based signals.
 # Will be refined once 60-day 5-min history backtest is added.
 INTRADAY_WINRATE_EST = 0.54
-INTRADAY_AVG_WIN_EST = 0.008   # 0.8% gross avg win
-INTRADAY_AVG_LOSS_EST = 0.004  # 0.4% gross avg loss
+INTRADAY_AVG_WIN_EST = 0.010   # 1.0% gross avg win (matches MIN_TP_PCT floor)
+INTRADAY_AVG_LOSS_EST = 0.004  # 0.4% gross avg loss (matches MIN_SL_PCT floor)
 
 
 @dataclass
@@ -120,14 +122,15 @@ def _classify(last: pd.Series, allow_short: bool) -> int:
     ema_bull = last["ema5"] > last["ema20"]
     price_bull = last["Close"] > last["vwap"]
     rsi_bull = last["rsi14"] > RSI_LONG
+    vol_ok = float(last.get("vol_ratio", 1.0)) > 1.0  # above-average volume confirms move
 
     ema_bear = last["ema5"] < last["ema20"]
     price_bear = last["Close"] < last["vwap"]
     rsi_bear = last["rsi14"] < RSI_SHORT
 
-    if ema_bull and price_bull and rsi_bull:
+    if ema_bull and price_bull and rsi_bull and vol_ok:
         return 1
-    if allow_short and ema_bear and price_bear and rsi_bear:
+    if allow_short and ema_bear and price_bear and rsi_bear and vol_ok:
         return -1
     return 0
 
