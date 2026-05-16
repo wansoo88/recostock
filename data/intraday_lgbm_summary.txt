@@ -1,0 +1,26 @@
+==============================================================================
+INTRADAY LIGHTGBM -- 60d, 5m bars, horizon=24 bars
+==============================================================================
+folds: 4  avg IS AUC: 0.8988  avg OOS AUC: 0.5202
+trades: 304
+sessions:      36  (avg 8.44 trades/day)
+winrate:       24.01%
+avg win:       +0.387%   avg loss: -0.436%
+payoff:        0.89
+expectancy:    gross +0.012%  |  net -0.238%  (after 0.25% cost)
+sharpe (d):    -12.65
+max drawdown:  -54.19%
+by reason:     {'EOD': 206, 'FLIP': 49, 'SL': 38, 'TP': 11}
+
+by ticker:
+         n      wr     avg
+ticker                    
+DIA     50  0.2400 -0.0015
+QQQ     47  0.2766 -0.0029
+SPY     41  0.2195 -0.0023
+XLE     33  0.1212 -0.0047
+XLF     29  0.2759 -0.0009
+XLI     31  0.3226 -0.0011
+XLK     26  0.2692 -0.0032
+XLV     21  0.1429 -0.0023
+XLY     26  0.2692 -0.0028

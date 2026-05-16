@@ -1,0 +1,25 @@
+================================================================
+INTRADAY BACKTEST -- 60d, 9 tickers
+================================================================
+trades:        265
+sessions:      55  (avg 4.82 trades/day)
+winrate:       17.36%
+avg win:       +0.289%   avg loss: -0.374%
+payoff:        0.77
+expectancy:    gross -0.009%  |  net -0.259%  (after 0.25% cost)
+sharpe (d):    -14.82
+max drawdown:  -49.72%
+by reason:     {'EOD': 190, 'SL': 60, 'FLIP': 10, 'TP': 5}
+
+by ticker:
+         n      wr     avg
+ticker                    
+DIA     41  0.0976 -0.0029
+QQQ     41  0.1951 -0.0025
+SPY     56  0.1786 -0.0025
+XLE     26  0.1923 -0.0024
+XLF     19  0.0526 -0.0031
+XLI     26  0.1154 -0.0032
+XLK     21  0.3333 -0.0017
+XLV     13  0.2308 -0.0022
+XLY     22  0.2273 -0.0024

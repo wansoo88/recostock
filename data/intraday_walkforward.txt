@@ -1,0 +1,14 @@
+================================================================================
+WALK-FORWARD VALIDATION  --  IS 30d / OOS 30d
+================================================================================
+Selected (IS-best, n>=10):  ATR>=0.0030  TP=0.0200  SL=0.0070
+
+IS  results (n=10):
+   winrate 60.00%   gross +0.305%   net +0.055%   payoff 0.82
+   TP=0  SL=2
+
+OOS results (n=3):
+   winrate 0.00%   gross -0.700%   net -0.950%   payoff 0.00
+   by_reason: {'SL': 3}
+
+DEGRADATION:  IS gross +0.305% -> OOS gross -0.700%  (delta -1.005%)

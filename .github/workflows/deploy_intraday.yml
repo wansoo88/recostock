@@ -1,19 +1,12 @@
-name: Deploy Intraday Bot
+name: Deploy Intraday Bot (DISABLED)
 
+# DISABLED 2026-05-16: intraday system retired.
+# 12 statistical approaches confirmed no alpha exists at retail data scale
+# (yfinance 15-min delayed + 5-min bars + 9 ETFs + 0.25% cost). See handoff.md.
+# To re-enable: restore the push/paths trigger below and run `systemctl enable
+# --now intraday-bot` on the server.
 on:
-  push:
-    branches: [main]
-    paths:
-      # Only redeploy when intraday-related code changes
-      - "scripts/run_intraday.py"
-      - "bot/intraday_bot.py"
-      - "data/intraday.py"
-      - "features/intraday_factors.py"
-      - "signals/intraday_generator.py"
-      - "paper/intraday_tracker.py"
-      - "report/intraday_report.py"
-      - "requirements.txt"
-  workflow_dispatch:   # Allow manual trigger from GitHub UI
+  workflow_dispatch:   # Manual-only — automatic deployments disabled
 
 concurrency:
   group: deploy-intraday
