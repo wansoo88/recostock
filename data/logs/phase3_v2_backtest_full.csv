@@ -1,0 +1,4 @@
+label,n_weeks,n_active_weeks,wr_weeks,n_active_avg,sharpe,mdd_pct,total_ret_pct
+v1 baseline (1d target),443,385,0.5481,4.57,0.2385,-41.72,26.01
+"v2 uniform (5d target, no weight)",430,391,0.5499,6.07,0.3437,-38.71,45.95
+"v2 weighted (5d target, recency)",430,411,0.5304,6.09,0.2662,-43.45,30.25

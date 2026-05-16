@@ -1,0 +1,6 @@
+ticker,feature,ic,n,p_value,verdict
+QQQ,qqq_smh_spread,-0.019,2739,0.3198,REJECT
+XLK,xlk_smh_spread,-0.0142,2739,0.4585,REJECT
+XLF,xlf_kre_spread,0.017,2739,0.3737,REJECT
+XLE,xle_xop_spread,0.012,2739,0.5285,REJECT
+XLE,xle_oil_elasticity,-0.0048,2656,0.8035,REJECT

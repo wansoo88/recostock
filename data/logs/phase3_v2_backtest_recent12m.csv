@@ -1,0 +1,4 @@
+label,n_weeks,wr,sharpe,mdd_pct,total_ret_pct
+v1 baseline (1d target),51,0.6098,1.0754,-9.11,13.16
+v2 uniform,51,0.6304,1.3994,-8.4,15.16
+v2 weighted,51,0.62,0.9993,-13.99,11.52
