@@ -29,7 +29,7 @@ if [ ! -f "$REPO_DIR/deploy/.env" ]; then
 fi
 
 # 3. systemd service
-cp "$REPO_DIR/deploy/intraday.service" /etc/systemd/system/
+cp "$REPO_DIR/deploy/intraday.service" /etc/systemd/system/intraday-bot.service
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME"
 echo "[OK] systemd service installed"
