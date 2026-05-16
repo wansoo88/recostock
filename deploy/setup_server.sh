@@ -13,8 +13,9 @@ echo "=== Recostock server setup ==="
 apt-get update -qq
 apt-get install -y -qq python3-venv python3-pip
 
-# 1. Python venv
-if [ ! -d "$VENV_DIR" ]; then
+# 1. Python venv (recreate if broken)
+if [ ! -f "$VENV_DIR/bin/pip" ]; then
+    rm -rf "$VENV_DIR"
     python3 -m venv "$VENV_DIR"
 fi
 "$VENV_DIR/bin/pip" install --quiet --upgrade pip
