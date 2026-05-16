@@ -21,9 +21,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import config
 import pandas as pd
 
-from data.collector import fetch_etf_ohlcv, fetch_vix, fetch_macro, save_parquet
+from data.collector import (
+    fetch_etf_ohlcv, fetch_vix, fetch_macro,
+    fetch_macro_yfinance, save_parquet,
+)
 from data.universe import get_active_universe, UNIVERSE_BY_TICKER
-from models.inference import (
+# v3 production inference: macro features + top-K selection (threshold 0.58)
+# Switched from models.inference (v1) on 2026-05-17 per user approval (option 1).
+from models.inference_v3 import (
     compute_rolling_stats,
     load_proba_history,
     save_proba_history,
@@ -61,7 +66,7 @@ def _env_bool(key: str) -> bool:
 
 
 def _append_and_save(history, raw_proba):
-    from models.inference import append_today_proba
+    from models.inference_v3 import append_today_proba
     updated = append_today_proba(history, raw_proba)
     save_proba_history(updated)
     return updated
@@ -106,6 +111,12 @@ async def main() -> None:
         for name, series in macro.items():
             save_parquet(series, f"macro_{name}")
         del macro
+
+    # v3 model requires yfinance-based macro (oil, gold, DXY, yields, HY/IG, etc.)
+    try:
+        fetch_macro_yfinance()
+    except Exception as exc:
+        log.warning("yfinance macro fetch failed (v3 inference may degrade): %s", exc)
 
     # Free fetched objects before loading parquet for inference
     del ohlcv, vix

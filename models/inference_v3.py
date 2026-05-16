@@ -36,7 +36,11 @@ EMA_SPAN = 5
 ROLLING_WINDOW = 60
 HOLD_DAYS = 5
 MIN_ACTIVE_FRIDAYS = 8
-TOP_K = 7   # Production setting — verified in final_topk_comparison.py
+# Production setting verified in scripts/push_wr_higher.py:
+#   v3 top-5 thr=0.58 → Recent 12m  WR 57%, Sharpe 1.69, MDD -3.5%, +0.030%/day
+# Raising threshold above 0.60 reduces trade count and turns EV negative.
+TOP_K = 5
+PRODUCTION_THRESHOLD = 0.58
 
 # Same KEEP macro features as v2/v3 training
 MACRO_KEEP_FEATURES = [
@@ -183,7 +187,8 @@ def score_today(close_df: pd.DataFrame, vix_df: pd.DataFrame | None,
     hist_with_today = append_today_proba(proba_history, raw_proba)
     ema_proba = hist_with_today.ewm(span=EMA_SPAN).mean().iloc[-1]
 
-    threshold = config.SIGNAL_THRESHOLD
+    # Use v3 production threshold (0.58) — stricter than legacy config.SIGNAL_THRESHOLD
+    threshold = PRODUCTION_THRESHOLD
     # Top-K selection: only the top-K highest ema_probas (and above threshold) get signal=1
     eligible = ema_proba[ema_proba >= threshold]
     if len(eligible) == 0:

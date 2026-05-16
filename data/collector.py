@@ -86,6 +86,17 @@ def load_parquet(name: str) -> pd.DataFrame:
     return pd.read_parquet(RAW_DIR / f"{name}.parquet")
 
 
+def fetch_macro_yfinance() -> None:
+    """Download yfinance-based macro proxies (no FRED key required).
+
+    Used by v3 inference for the 11 KEEP macro features. Strictly causal.
+    """
+    from data.macro_collector import fetch_macro_series, save_macro_cache
+    series = fetch_macro_series()
+    save_macro_cache(series)
+    log.info("yfinance macro series saved: %d", len(series))
+
+
 if __name__ == "__main__":
     import os
     logging.basicConfig(level=logging.INFO)
@@ -104,4 +115,7 @@ if __name__ == "__main__":
     for k, v in macro.items():
         save_parquet(v, f"macro_{k}")
 
-    log.info("Phase 0 data collection complete.")
+    # yfinance-based macro for v3 model
+    fetch_macro_yfinance()
+
+    log.info("Data collection complete.")
