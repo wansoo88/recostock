@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pandas as pd
 
+import config
 from paper.tracker import compute_metrics, load_trades, tier2_gate_check
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -98,6 +99,12 @@ def main() -> None:
     print(f"\n  Backtest Sharpe (Phase 3): {backtest_sharpe:.3f}")
 
     checks = tier2_gate_check(metrics, backtest_sharpe)
+    # Tier 1 MDD gate (previously omitted from Tier 2 check — bug fix 2026-05-16)
+    mdd_abs = abs(metrics["mdd"])
+    checks.append((
+        f"Tier 1 carry-over: MDD < {config.TIER1_MDD_MAX:.0%}",
+        mdd_abs < config.TIER1_MDD_MAX,
+    ))
     print("\n── Tier 2 Gate Check ──")
     for label, passed in checks:
         print(f"  {'✅' if passed else '❌'}  {label}")

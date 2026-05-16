@@ -32,11 +32,21 @@ def load_backtest_sharpe() -> float:
 
 
 def evaluate_tier2(include_backfill: bool = False) -> dict:
-    """Evaluate Tier 2 gate. Returns dict with passed, checks, metrics."""
+    """Evaluate Tier 2 gate. Returns dict with passed, checks, metrics.
+
+    Now also verifies the Tier 1 MDD<25% gate — previously omitted, which
+    let MDD-failing systems claim Tier 2 PASS.
+    """
     trades = load_trades()
     metrics = compute_metrics(trades, include_backfill=include_backfill)
     backtest_sharpe = load_backtest_sharpe()
     checks = tier2_gate_check(metrics, backtest_sharpe)
+    # Tier 1 MDD gate must also hold for Tier 2 to be valid
+    mdd_abs = abs(metrics.get("mdd", 0.0))
+    checks.append((
+        f"Tier 1 carry-over: MDD < {config.TIER1_MDD_MAX:.0%}",
+        mdd_abs < config.TIER1_MDD_MAX,
+    ))
     passed = all(p for _, p in checks)
     return {
         "passed": passed,
