@@ -1,0 +1,48 @@
+name: Nightly Retrain (v3)
+
+on:
+  # 14:00 UTC, Mon–Fri — finishes well before signal cron (20:30 / 21:30 UTC)
+  schedule:
+    - cron: "0 14 * * 1-5"
+  workflow_dispatch:
+
+concurrency:
+  group: retrain
+  cancel-in-progress: false
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write           # commit new weights + retrain_history.csv
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run nightly retrain
+        id: train
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scripts/nightly_retrain.py
+
+      - name: Commit new weights
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add models/weights/lgbm_phase3_v3_uniform.pkl \
+                  models/weights/lgbm_phase3_v3_uniform_importance.csv \
+                  data/logs/retrain_history.csv
+          git diff --staged --quiet || git commit -m "weights: nightly retrain $(date -u +%Y-%m-%d) [skip ci]"
+          git push
