@@ -8,7 +8,9 @@ long-format parquet at data/raw/sentiment_daily.parquet:
 Sources currently wired:
   - Yahoo Finance per-ticker headline RSS  (sources.yahoo_rss)
   - HackerNews Algolia search              (sources.hackernews)
+  - SEC EDGAR full-text filing search      (sources.edgar)
+  - StockTwits per-symbol stream           (sources.stocktwits)
 
-Reddit / SEC EDGAR are intentionally deferred until user provides API keys
-or a confirmed need is established.
+Reddit is intentionally deferred — StockTwits covers the same retail
+sentiment niche with better signal/noise and no auth gating.
 """
