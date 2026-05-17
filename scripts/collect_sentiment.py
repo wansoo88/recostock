@@ -7,7 +7,8 @@ they are wired into the model. Until then, this only writes the parquet.
 Pipeline:
   1. Yahoo Finance per-ticker RSS  (17 ETFs)
   2. HackerNews Algolia            (each ticker + ETF name alias)
-  3. Aggregate ticker mention counts → upsert data/raw/sentiment_daily.parquet
+  3. SEC EDGAR full-text search    (formal ETF name → 8-K / 10-Q / N-PORT / 485BPOS)
+  4. Aggregate ticker mention counts → upsert data/sentiment/sentiment_daily.parquet
 
 Failure policy:
   - One source down → continue with the other; mark missing source absent.
@@ -29,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import pandas as pd
 
 from sentiment.aggregator import aggregate, upsert_parquet, PARQUET_PATH
-from sentiment.sources import yahoo_rss, hackernews
+from sentiment.sources import yahoo_rss, hackernews, edgar
 from sentiment.ticker_extract import TRACKED_TICKERS
 
 logging.basicConfig(
@@ -69,6 +70,17 @@ def main() -> int:
     except Exception as exc:
         log.exception("hackernews source crashed: %s", exc)
         source_ok["hackernews"] = False
+
+    try:
+        # Fetch 5 days so the aggregator's 2-day publish window has slack and
+        # late-filed forms still get attributed to the correct day.
+        docs = edgar.fetch(lookback_days=5)
+        all_docs.extend(docs)
+        # EDGAR can legitimately return 0 hits on quiet days; treat empty as OK.
+        source_ok["edgar"] = True
+    except Exception as exc:
+        log.exception("edgar source crashed: %s", exc)
+        source_ok["edgar"] = False
 
     log.info("Source health: %s", source_ok)
     if not any(source_ok.values()):

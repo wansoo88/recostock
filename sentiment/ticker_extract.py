@@ -17,10 +17,12 @@ from typing import Iterable
 
 import config
 
-# Tickers we actually score on — matches nightly_retrain.EXPANDED_TICKERS.
+# Tickers we score on — superset of nightly_retrain.EXPANDED_TICKERS plus VXX
+# (which is in the active Phase 4 universe and surfaces in v3 top-5 signals).
 NEW_SECTORS = ["XLB", "XLU", "XLP", "XLC", "IBB"]
 TRACKED_TICKERS: list[str] = (
-    config.CORE_ETFS + config.SECTOR_ETFS + NEW_SECTORS + config.INVERSE_ETFS
+    config.CORE_ETFS + config.SECTOR_ETFS + NEW_SECTORS
+    + config.INVERSE_ETFS + config.VOLATILITY_ETFS
 )
 
 # Short tickers that collide with English words — require cashtag prefix.
