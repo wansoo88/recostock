@@ -30,7 +30,7 @@ class BacktestResult:
             self.sharpe > config.TIER1_SHARPE_MIN
             and self.mdd < config.TIER1_MDD_MAX
             and self.oos_is_ratio >= config.TIER1_OOS_IS_RATIO_MIN
-            and self.wf_positive_pct >= 0.5
+            and self.wf_positive_pct >= config.TIER1_WF_POSITIVE_MIN
             and self.n_trades >= config.TIER1_MIN_TRADING_DAYS
         )
 
