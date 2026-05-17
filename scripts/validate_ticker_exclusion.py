@@ -4,6 +4,10 @@ we now check if it would also have been the right call in 2023-2024 (a HOLDOUT
 window the recommendation didn't see).
 """
 from __future__ import annotations
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import numpy as np
 import pandas as pd
 
