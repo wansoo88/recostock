@@ -119,6 +119,18 @@ async def main() -> None:
     except Exception as exc:
         log.warning("yfinance macro fetch failed (v3 inference may degrade): %s", exc)
 
+    # SPY Put/Call ratio — monitoring only (added 2026-05-18, becomes a
+    # candidate regime gate once 60+ days of history accumulate).
+    try:
+        from data.options_pc_collector import append_today as _append_pc, status_summary as _pc_status
+        pc_row = _append_pc()
+        log.info(_pc_status())
+        if pc_row:
+            log.info("Today's SPY P/C — vol=%.3f  OI=%.3f  (monitoring, NOT a gate yet)",
+                     pc_row["vol_pc"], pc_row["oi_pc"])
+    except Exception as exc:
+        log.warning("Put/Call collector failed (non-fatal): %s", exc)
+
     # Free fetched objects before loading parquet for inference
     del ohlcv, vix
     gc.collect()
