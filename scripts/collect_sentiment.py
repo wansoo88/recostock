@@ -133,6 +133,21 @@ def main() -> int:
     df = aggregate(all_docs, today=today_utc, polarities=polarities)
     if df.empty:
         log.warning("No matching ticker mentions in %d docs — writing empty marker", len(all_docs))
+    else:
+        top = (df.groupby("ticker")["mention_count"].sum()
+                 .sort_values(ascending=False).head(8))
+        log.info("Top tickers today:\n%s", top.to_string())
+
+        # Per-source coverage: scored share is the leading indicator of feature
+        # quality. If a source is at 0% scored over multiple days, FinBERT
+        # likely isn't installed in the runner — investigate before IC.
+        coverage = (df.groupby("source")
+                      .agg(mentions=("mention_count", "sum"),
+                           scored=("polarity_n", "sum")))
+        coverage["scored_pct"] = (
+            (coverage["scored"] / coverage["mentions"] * 100).round(1)
+        )
+        log.info("Per-source coverage today:\n%s", coverage.to_string())
 
     if dry_run:
         log.info("[--dry-run] rows that would be written:\n%s",
@@ -140,12 +155,6 @@ def main() -> int:
         return 0
 
     upsert_parquet(df, PARQUET_PATH)
-
-    # Quick summary
-    if not df.empty:
-        top = (df.groupby("ticker")["mention_count"].sum()
-                 .sort_values(ascending=False).head(8))
-        log.info("Top tickers today:\n%s", top.to_string())
     return 0
 
 
