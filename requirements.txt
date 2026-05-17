@@ -5,5 +5,5 @@ numpy>=1.26.0
 python-telegram-bot[job-queue]>=21.0
 requests>=2.31.0
 pyarrow>=15.0.0    # parquet I/O
-lightgbm>=4.0.0    # Phase 3: ML model
+lightgbm>=4.3.0    # Phase 3: ML model (aligned with requirements-dev.txt for reproducibility)
 scikit-learn>=1.4.0  # Phase 3: metrics (roc_auc_score)
