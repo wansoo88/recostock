@@ -61,13 +61,16 @@ def regime_ok(vix_latest: float | None,
               spy_close: float | None,
               spy_sma200: float | None,
               vix9d_latest: float | None = None,
-              skew_z: float | None = None) -> tuple[bool, str]:
-    """Check regime gates: VIX, SPY trend, plus optional v3 options overlays.
+              skew_z: float | None = None,
+              move_z: float | None = None) -> tuple[bool, str]:
+    """Check regime gates: VIX, SPY trend, plus optional v3/v4 overlays.
 
     v3 gates (when config.CONVICTION_SKEW_Z_MAX / VIX_TERM_MAX are set):
       - vix9d_latest / vix_latest < CONVICTION_VIX_TERM_MAX (contango)
       - skew_z < CONVICTION_SKEW_Z_MAX (tail risk not extreme)
-    Either may be None to disable that gate (also via config = None).
+    v4 gate (when config.CONVICTION_MOVE_Z_MAX is set):
+      - move_z < CONVICTION_MOVE_Z_MAX (bond vol not stressed)
+    Any may be None to disable that gate (also via config = None).
 
     Returns (passed, reason_string)."""
     if vix_latest is None:
@@ -99,6 +102,15 @@ def regime_ok(vix_latest: float | None,
             if skew_z >= skew_max:
                 return False, f"SKEW z {skew_z:.3f} >= {skew_max} (elevated tail risk)"
 
+    # v4: MOVE bond-vol z-score
+    move_max = getattr(config, "CONVICTION_MOVE_Z_MAX", None)
+    if move_max is not None:
+        if move_z is None or pd.isna(move_z):
+            log.warning("Conviction v4: MOVE z-score unavailable — skipping move gate (degrades to v3)")
+        else:
+            if move_z >= move_max:
+                return False, f"MOVE z {move_z:.3f} >= {move_max} (bond market stress)"
+
     return True, "regime ok"
 
 
@@ -111,6 +123,7 @@ def select_conviction_signals(
     active_tickers: set[str],
     vix9d_latest: float | None = None,
     skew_z: float | None = None,
+    move_z: float | None = None,
 ) -> list[Signal]:
     """Apply regime gate + long-only universe + K=1 selection.
 
@@ -126,7 +139,7 @@ def select_conviction_signals(
     Returns: 0 or 1 Signal objects. Empty list when regime fails or no eligible
     ticker meets the threshold."""
     ok, reason = regime_ok(vix_latest, spy_close, spy_sma200,
-                           vix9d_latest=vix9d_latest, skew_z=skew_z)
+                           vix9d_latest=vix9d_latest, skew_z=skew_z, move_z=move_z)
     if not ok:
         log.info("Conviction: regime gate FAIL — %s — no signal today", reason)
         return []

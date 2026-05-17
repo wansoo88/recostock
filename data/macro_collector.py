@@ -48,6 +48,8 @@ MACRO_TICKERS = {
     "vix9d":     "^VIX9D",       # 9-day VIX (short-term implied vol)
     "vix3m":     "^VIX3M",       # 3-month VIX (medium-term)
     "skew":      "^SKEW",        # CBOE SKEW Index (tail-risk pricing)
+    # Bond-volatility regime (added 2026-05-17 for conviction_v4):
+    "move":      "^MOVE",        # ICE BofA MOVE Index (bond market vol)
 }
 
 

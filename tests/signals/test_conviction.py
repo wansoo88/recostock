@@ -299,3 +299,53 @@ def test_v3_degrades_to_v2_when_options_data_missing(caplog):
     assert len(sigs) == 1
     assert any("VIX9D unavailable" in rec.message for rec in caplog.records)
     assert any("SKEW z-score unavailable" in rec.message for rec in caplog.records)
+
+
+# ── v4 Bond-vol regime overlay (added 2026-05-17) ─────────────────────────────
+
+def test_v4_rejects_when_move_elevated():
+    """MOVE z-score >= 1.0 means bond market vol stress."""
+    sr = _make_score_result({"SPY": 0.70})
+    sigs = select_conviction_signals(
+        score_result=sr,
+        latest_close=_make_closes({"SPY": 500.0}),
+        vix_latest=15.0, spy_close=500, spy_sma200=480,
+        active_tickers=ACTIVE,
+        vix9d_latest=13.0,    # contango
+        skew_z=0.5,           # tail risk normal
+        move_z=1.5,           # bond vol elevated → reject
+    )
+    assert sigs == []
+
+
+def test_v4_accepts_when_all_four_gates_pass():
+    """v4 = VIX + SPY trend + VIX9D term + SKEW + MOVE — all must pass."""
+    sr = _make_score_result({"SPY": 0.70})
+    sigs = select_conviction_signals(
+        score_result=sr,
+        latest_close=_make_closes({"SPY": 500.0}),
+        vix_latest=15.0, spy_close=500, spy_sma200=480,
+        active_tickers=ACTIVE,
+        vix9d_latest=13.0, skew_z=0.5, move_z=-0.3,  # all normal
+    )
+    assert len(sigs) == 1
+    s = sigs[0]
+    # v4 expected stats (n=19 holdout):
+    assert s.winrate == round(config.CONVICTION_EXPECTED_WINRATE, 4)  # 0.737
+    assert s.payoff == round(config.CONVICTION_EXPECTED_PAYOFF, 3)     # 1.25
+    assert s.is_valid()
+
+
+def test_v4_degrades_when_move_missing(caplog):
+    """If MOVE unavailable, log warning and skip MOVE gate (degrades to v3)."""
+    sr = _make_score_result({"SPY": 0.70})
+    with caplog.at_level("WARNING"):
+        sigs = select_conviction_signals(
+            score_result=sr,
+            latest_close=_make_closes({"SPY": 500.0}),
+            vix_latest=15.0, spy_close=500, spy_sma200=480,
+            active_tickers=ACTIVE,
+            vix9d_latest=13.0, skew_z=0.5, move_z=None,
+        )
+    assert len(sigs) == 1   # v3 gates still pass → signal fires
+    assert any("MOVE z-score unavailable" in rec.message for rec in caplog.records)

@@ -225,26 +225,40 @@ async def main() -> None:
                     vix_latest = regime.get("vix")
 
                     # v3 options-regime inputs: VIX9D and SKEW z-score from macro cache
+                    # v4 bond-vol input: MOVE z-score
                     vix9d_latest = None
                     skew_z = None
+                    move_z = None
+
+                    def _z_score_latest(path: Path, window: int) -> float | None:
+                        if not path.exists():
+                            return None
+                        series = pd.read_parquet(path).iloc[:, 0].dropna()
+                        if len(series) < window + 1:
+                            return None
+                        tail = series.tail(window + 1)
+                        mu = tail.iloc[:-1].mean()
+                        sigma = tail.iloc[:-1].std()
+                        if sigma <= 0:
+                            return None
+                        return float((tail.iloc[-1] - mu) / sigma)
+
                     try:
                         vix9d_path = Path("data/raw/macro/vix9d.parquet")
                         if vix9d_path.exists():
                             vix9d_series = pd.read_parquet(vix9d_path).iloc[:, 0].dropna()
                             if not vix9d_series.empty:
                                 vix9d_latest = float(vix9d_series.iloc[-1])
-                        skew_path = Path("data/raw/macro/skew.parquet")
-                        if skew_path.exists():
-                            skew_series = pd.read_parquet(skew_path).iloc[:, 0].dropna()
-                            window = config.CONVICTION_SKEW_Z_WINDOW
-                            if len(skew_series) >= window + 1:
-                                tail = skew_series.tail(window + 1)
-                                mu = tail.iloc[:-1].mean()
-                                sigma = tail.iloc[:-1].std()
-                                if sigma > 0:
-                                    skew_z = float((tail.iloc[-1] - mu) / sigma)
+                        skew_z = _z_score_latest(
+                            Path("data/raw/macro/skew.parquet"),
+                            config.CONVICTION_SKEW_Z_WINDOW,
+                        )
+                        move_z = _z_score_latest(
+                            Path("data/raw/macro/move.parquet"),
+                            config.CONVICTION_MOVE_Z_WINDOW,
+                        )
                     except Exception as exc:
-                        log.warning("Conviction v3: options-regime fetch failed: %s", exc)
+                        log.warning("Conviction v3/v4: regime fetch failed: %s", exc)
 
                     signals = select_conviction_signals(
                         score_result=score_result,
@@ -255,13 +269,15 @@ async def main() -> None:
                         active_tickers=active_tickers,
                         vix9d_latest=vix9d_latest,
                         skew_z=skew_z,
+                        move_z=move_z,
                     )
                     # Filter via is_valid() to match honesty principle #3.
                     signals = [s for s in signals if s.is_valid()]
                     log.info("Conviction: %d valid signal(s) after regime + is_valid gates "
-                             "(VIX9D=%s, SKEW_z=%s)", len(signals),
+                             "(VIX9D=%s SKEW_z=%s MOVE_z=%s)", len(signals),
                              f"{vix9d_latest:.2f}" if vix9d_latest else "N/A",
-                             f"{skew_z:.2f}" if skew_z is not None else "N/A")
+                             f"{skew_z:+.2f}" if skew_z is not None else "N/A",
+                             f"{move_z:+.2f}" if move_z is not None else "N/A")
                     # Skip the legacy loop below — we already produced signals.
                     score_result = {}  # neutralize legacy loop without altering its structure
 
