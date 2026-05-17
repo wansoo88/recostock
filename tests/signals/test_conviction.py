@@ -14,9 +14,17 @@ from signals.conviction import regime_ok, select_conviction_signals
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def _make_score_result(ema_map: dict[str, float]) -> dict[str, dict]:
-    return {t: {"raw_proba": v, "ema_proba": v, "signal": 1 if v >= 0.5 else 0}
-            for t, v in ema_map.items()}
+def _make_score_result(ema_map: dict[str, float],
+                       ema3_map: dict[str, float] | None = None,
+                       ema7_map: dict[str, float] | None = None) -> dict[str, dict]:
+    """ema_map = EMA-5. If ema3/ema7 not provided, mirror ema_map for v2 confirmation."""
+    return {t: {
+        "raw_proba": v,
+        "ema_proba": v,
+        "ema_proba_3": (ema3_map or ema_map).get(t, v),
+        "ema_proba_7": (ema7_map or ema_map).get(t, v),
+        "signal": 1 if v >= 0.5 else 0,
+    } for t, v in ema_map.items()}
 
 
 def _make_closes(price_map: dict[str, float]) -> pd.Series:
@@ -156,3 +164,71 @@ def test_skips_when_entry_price_unavailable():
         active_tickers=ACTIVE,
     )
     assert sigs == []
+
+
+# ── v2 Multi-EMA confirmation (added 2026-05-17) ──────────────────────────────
+
+def test_v2_multi_ema_rejects_when_ema3_below_threshold():
+    """v2: EMA-5 ≥ 0.65 alone is not enough — EMA-3 must also confirm."""
+    sr = _make_score_result(
+        ema_map={"SPY": 0.70},               # EMA-5 passes
+        ema3_map={"SPY": 0.55},              # EMA-3 fails (below 0.65)
+        ema7_map={"SPY": 0.68},              # EMA-7 passes
+    )
+    sigs = select_conviction_signals(
+        score_result=sr,
+        latest_close=_make_closes({"SPY": 500.0}),
+        vix_latest=15.0, spy_close=500, spy_sma200=480,
+        active_tickers=ACTIVE,
+    )
+    # CONVICTION_MULTI_EMA_CONFIRM defaults to True → reject SPY
+    assert sigs == []
+
+
+def test_v2_multi_ema_rejects_when_ema7_below_threshold():
+    """EMA-7 must also confirm."""
+    sr = _make_score_result(
+        ema_map={"SPY": 0.70},
+        ema3_map={"SPY": 0.68},
+        ema7_map={"SPY": 0.60},              # EMA-7 below threshold
+    )
+    sigs = select_conviction_signals(
+        score_result=sr,
+        latest_close=_make_closes({"SPY": 500.0}),
+        vix_latest=15.0, spy_close=500, spy_sma200=480,
+        active_tickers=ACTIVE,
+    )
+    assert sigs == []
+
+
+def test_v2_multi_ema_accepts_when_all_three_confirm():
+    """All three EMAs ≥ 0.65 → signal fires."""
+    sr = _make_score_result(
+        ema_map={"SPY": 0.70},
+        ema3_map={"SPY": 0.66},
+        ema7_map={"SPY": 0.67},
+    )
+    sigs = select_conviction_signals(
+        score_result=sr,
+        latest_close=_make_closes({"SPY": 500.0}),
+        vix_latest=15.0, spy_close=500, spy_sma200=480,
+        active_tickers=ACTIVE,
+    )
+    assert len(sigs) == 1
+    assert sigs[0].ticker == "SPY"
+
+
+def test_v2_falls_back_when_ema3_or_ema7_missing(caplog):
+    """Legacy callers without ema_proba_3/7 should NOT crash — warn + accept."""
+    # Build a score_result without the multi-EMA fields
+    sr = {"SPY": {"raw_proba": 0.70, "ema_proba": 0.70, "signal": 1}}
+    with caplog.at_level("WARNING"):
+        sigs = select_conviction_signals(
+            score_result=sr,
+            latest_close=_make_closes({"SPY": 500.0}),
+            vix_latest=15.0, spy_close=500, spy_sma200=480,
+            active_tickers=ACTIVE,
+        )
+    # Falls back to v1 behavior: signal fires
+    assert len(sigs) == 1
+    assert any("missing ema_proba_3/7" in rec.message for rec in caplog.records)

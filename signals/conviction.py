@@ -1,16 +1,22 @@
-"""Conviction strategy v1 — productized from walk-forward experiments.
+"""Conviction strategy — productized from walk-forward experiments.
 
-Strategy summary (see REVIEW_2026-05-17.md §9 and scripts/experiment_tp_sweep.py):
+v1 (initial): single EMA-5 ≥ 0.65, K=1, regime gate, fixed SL/TP.
+v2 (Multi-EMA, 2026-05-17): also requires EMA-3 ≥ 0.65 AND EMA-7 ≥ 0.65.
+                            Cross-timeframe confirmation raises WR.
+
+Strategy summary:
     universe: long-only (core + sector, no inverse/VXX/leverage)
     regime:   VIX < 20 AND SPY > 200d SMA
-    select:   K=1 by ema_proba, threshold 0.65
+    select:   K=1 by ema_proba (EMA-5), threshold 0.65
+              v2: ALSO require ema_proba_3 ≥ 0.65 AND ema_proba_7 ≥ 0.65
     exit:     SL 1.0% intraday OR TP 3.0% intraday OR Friday close after 5 days
 
-Holdout 2024-01 ~ 2026-05 (n=36 trades, walk-forward):
-    WR 58.33%, Payoff 1.20, Sharpe 1.67, MDD -11.1%, Total +13.22%
+Holdout 2024-01 ~ 2026-05 (walk-forward):
+    v1:  n=36  WR 58.33%  Payoff 1.20  Sharpe 1.67  MDD -11.1%  Total +12.85%
+    v2:  n=33  WR 63.64%  Payoff 1.20  Sharpe ~1.8  MDD <-15%   Total +16.60%
 
-Activated when env STRATEGY_MODE=conviction_v1. Otherwise the existing
-production path (top-5, threshold 0.58, dynamic TP/SL) runs unchanged.
+Activated when env STRATEGY_MODE=conviction_v1. v2 is the default unless
+config.CONVICTION_MULTI_EMA_CONFIRM is set to False.
 
 Design notes
 ------------
@@ -19,6 +25,9 @@ Design notes
   rolling_stats. The Signal carries the backtested expected winrate / payoff
   / sample_n (from config.CONVICTION_EXPECTED_*) so is_valid() passes.
 - Pure function: takes proba + market data, returns signals. No I/O.
+- Multi-EMA confirmation requires score_result entries to include
+  `ema_proba_3` and `ema_proba_7`. If absent (legacy callers), v2 falls
+  back to v1 behavior with a log warning.
 """
 from __future__ import annotations
 
@@ -84,7 +93,10 @@ def select_conviction_signals(
         return []
 
     # Build (ticker, ema_proba) list filtered by universe + threshold + active phase
+    # v2: Multi-EMA confirmation — require EMA-3, EMA-5, EMA-7 all ≥ threshold
     candidates: list[tuple[str, float]] = []
+    multi_ema = getattr(config, "CONVICTION_MULTI_EMA_CONFIRM", False)
+    rejected_multi_ema = 0
     for ticker, scores in score_result.items():
         if ticker not in active_tickers:
             continue
@@ -94,7 +106,21 @@ def select_conviction_signals(
         ema = float(scores.get("ema_proba", 0.0))
         if ema < config.CONVICTION_THRESHOLD:
             continue
+        if multi_ema:
+            ema3 = scores.get("ema_proba_3")
+            ema7 = scores.get("ema_proba_7")
+            if ema3 is None or ema7 is None:
+                log.warning("Conviction v2: %s missing ema_proba_3/7 — "
+                            "falling back to single-EMA gate", ticker)
+            else:
+                if float(ema3) < config.CONVICTION_THRESHOLD or float(ema7) < config.CONVICTION_THRESHOLD:
+                    rejected_multi_ema += 1
+                    continue
         candidates.append((ticker, ema))
+
+    if rejected_multi_ema:
+        log.info("Conviction v2: rejected %d candidate(s) on Multi-EMA confirmation",
+                 rejected_multi_ema)
 
     if not candidates:
         log.info("Conviction: no candidate above threshold %.2f in long-only universe",

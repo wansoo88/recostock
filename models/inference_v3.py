@@ -186,6 +186,12 @@ def score_today(close_df: pd.DataFrame, vix_df: pd.DataFrame | None,
 
     hist_with_today = append_today_proba(proba_history, raw_proba)
     ema_proba = hist_with_today.ewm(span=EMA_SPAN).mean().iloc[-1]
+    # Multi-EMA confirmation support (added 2026-05-17 for conviction_v2):
+    # EMA-3 and EMA-7 used by signals/conviction.py to require cross-timeframe
+    # agreement before firing. Holdout 2024+ showed WR 58.3% → 63.6% with this
+    # confirmation. See scripts/experiment_round4.py.
+    ema_proba_3 = hist_with_today.ewm(span=3).mean().iloc[-1]
+    ema_proba_7 = hist_with_today.ewm(span=7).mean().iloc[-1]
 
     # Use v3 production threshold (0.58) — stricter than legacy config.SIGNAL_THRESHOLD
     threshold = PRODUCTION_THRESHOLD
@@ -196,6 +202,9 @@ def score_today(close_df: pd.DataFrame, vix_df: pd.DataFrame | None,
     else:
         chosen = set(eligible.sort_values(ascending=False).head(top_k).index)
 
+    def _safe_float(series_val, fallback):
+        return float(fallback) if pd.isna(series_val) else float(series_val)
+
     results = {}
     for ticker in raw_proba.index:
         raw = float(raw_proba[ticker])
@@ -203,12 +212,15 @@ def score_today(close_df: pd.DataFrame, vix_df: pd.DataFrame | None,
         # exists with NaN value (Series.get fallback only triggers on missing
         # key, not on NaN). NaN ema would propagate through is_valid() since
         # NaN comparisons silently fail. Guard explicitly.
-        ema_raw = ema_proba.get(ticker, raw)
-        ema = float(raw) if pd.isna(ema_raw) else float(ema_raw)
+        ema = _safe_float(ema_proba.get(ticker, raw), raw)
+        ema3 = _safe_float(ema_proba_3.get(ticker, raw), raw)
+        ema7 = _safe_float(ema_proba_7.get(ticker, raw), raw)
         rank = ema_proba.rank(ascending=False).get(ticker, np.nan)
         results[ticker] = {
             "raw_proba": round(raw, 4),
-            "ema_proba": round(ema, 4),
+            "ema_proba": round(ema, 4),          # EMA-5 (legacy field, used by production_v3)
+            "ema_proba_3": round(ema3, 4),       # EMA-3 (conviction_v2)
+            "ema_proba_7": round(ema7, 4),       # EMA-7 (conviction_v2)
             "signal": 1 if ticker in chosen else 0,
             "rank": int(rank) if not pd.isna(rank) else 999,
         }
