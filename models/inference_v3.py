@@ -199,7 +199,12 @@ def score_today(close_df: pd.DataFrame, vix_df: pd.DataFrame | None,
     results = {}
     for ticker in raw_proba.index:
         raw = float(raw_proba[ticker])
-        ema = float(ema_proba.get(ticker, raw))
+        # BUG FIX 2026-05-17: Series.get(ticker, raw) returns NaN if ticker
+        # exists with NaN value (Series.get fallback only triggers on missing
+        # key, not on NaN). NaN ema would propagate through is_valid() since
+        # NaN comparisons silently fail. Guard explicitly.
+        ema_raw = ema_proba.get(ticker, raw)
+        ema = float(raw) if pd.isna(ema_raw) else float(ema_raw)
         rank = ema_proba.rank(ascending=False).get(ticker, np.nan)
         results[ticker] = {
             "raw_proba": round(raw, 4),
@@ -248,7 +253,12 @@ def compute_rolling_stats(close_df, vix_df, proba_history, window=ROLLING_WINDOW
         common = sig.index.intersection(ret.index)
         if common.empty:
             continue
-        active_idx = common[sig.reindex(common) >= config.SIGNAL_THRESHOLD]
+        # BUG FIX 2026-05-17: rolling stats must use the same threshold as
+        # score_today's signal gate (PRODUCTION_THRESHOLD = 0.58). Previously
+        # used config.SIGNAL_THRESHOLD (0.53), so reported winrate/payoff
+        # measured a different signal set than the one that actually fires —
+        # the gap between threshold and triggered signals contaminated stats.
+        active_idx = common[sig.reindex(common) >= PRODUCTION_THRESHOLD]
         if len(active_idx) < MIN_ACTIVE_FRIDAYS:
             continue
         r = ret.loc[active_idx]
