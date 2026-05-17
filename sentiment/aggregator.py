@@ -1,16 +1,28 @@
-"""Aggregate raw documents → daily (date, ticker, source, mention_count) rows.
+"""Aggregate raw documents → daily long-format sentiment rows.
 
-Why per-source rows instead of one combined count?
-  - Lets us check IC per source separately before mixing.
-  - Keeps the parquet long-format trivially queryable & extensible (adding
-    Reddit or EDGAR later doesn't change the schema).
+Output schema:
+    date | ticker | source | mention_count | polarity_mean | polarity_n
+
+- mention_count: # of distinct articles per (date, ticker, source).
+- polarity_mean: mean FinBERT polarity (pos - neg) ∈ [-1, +1] over the
+  articles that were successfully scored. NaN when polarity_n == 0.
+- polarity_n:    # of articles whose text was actually scored (≤ mention_count).
+                 0 when the FinBERT scorer is unavailable (no transformers
+                 installed locally) or the doc text was empty.
+
+Per-source rows (not one combined count) so we can:
+  - Inspect IC per source before mixing.
+  - Add sources later without changing schema.
 """
 from __future__ import annotations
 
 import logging
+import math
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from typing import Sequence
 
+import numpy as np
 import pandas as pd
 
 from sentiment.ticker_extract import extract_tickers, TRACKED_TICKERS
@@ -27,23 +39,30 @@ PARQUET_PATH = Path("data/sentiment/sentiment_daily.parquet")
 LOOKBACK_DAYS = 2
 
 
-def aggregate(docs: list[dict], today: date | None = None) -> pd.DataFrame:
-    """Return long-format DataFrame labeled with the run's `today` (UTC date).
+def aggregate(docs: list[dict], today: date | None = None,
+              polarities: Sequence[float | None] | None = None) -> pd.DataFrame:
+    """Long-format DataFrame labeled with the run's `today` (UTC date).
 
     Documents published within the last LOOKBACK_DAYS are all counted into
-    `today` — daily collection snapshots the recent mention volume rather
-    than partitioning by article date. This is the form the model will
-    consume (a per-day sentiment intensity feature)."""
+    `today` — daily collection snapshots the recent mention volume.
+
+    `polarities[i]` is the FinBERT polarity for `docs[i]`, or None if not
+    scored. Each ticker matched in a doc inherits that doc's polarity (one
+    article about XLE and XLF gives both groups the same score)."""
     if today is None:
         today = datetime.now(timezone.utc).date()
+    if polarities is None:
+        polarities = [None] * len(docs)
+    elif len(polarities) != len(docs):
+        raise ValueError(f"polarities length {len(polarities)} != docs length {len(docs)}")
     earliest = today - timedelta(days=LOOKBACK_DAYS)
 
-    rows: list[dict] = []
-    # Per (source, ticker) counter so a single article doesn't double-count.
     counter: dict[tuple[str, str], int] = {}
+    polarity_sum: dict[tuple[str, str], float] = {}
+    polarity_n: dict[tuple[str, str], int] = {}
     seen_keys: set[tuple[str, str, str]] = set()  # de-dup per source+title+ticker
 
-    for d in docs:
+    for d, pol in zip(docs, polarities):
         pub = d.get("published")
         if pub is None:
             continue
@@ -60,30 +79,50 @@ def aggregate(docs: list[dict], today: date | None = None) -> pd.DataFrame:
             if dedup in seen_keys:
                 continue
             seen_keys.add(dedup)
-            counter[(source, t)] = counter.get((source, t), 0) + 1
+            key = (source, t)
+            counter[key] = counter.get(key, 0) + 1
+            if pol is not None and not math.isnan(pol):
+                polarity_sum[key] = polarity_sum.get(key, 0.0) + float(pol)
+                polarity_n[key] = polarity_n.get(key, 0) + 1
 
+    rows: list[dict] = []
     for (source, ticker), cnt in counter.items():
+        n = polarity_n.get((source, ticker), 0)
+        mean = (polarity_sum[(source, ticker)] / n) if n > 0 else float("nan")
         rows.append({
             "date": today,
             "ticker": ticker,
             "source": source,
             "mention_count": cnt,
+            "polarity_mean": mean,
+            "polarity_n": n,
         })
 
-    df = pd.DataFrame(rows, columns=["date", "ticker", "source", "mention_count"])
+    df = pd.DataFrame(
+        rows,
+        columns=["date", "ticker", "source", "mention_count", "polarity_mean", "polarity_n"],
+    )
     if df.empty:
         log.warning("Aggregator produced 0 rows for %s — collection may have failed", today)
     else:
-        log.info("Aggregated %d (source, ticker) rows for %s", len(df), today)
+        scored_share = (df["polarity_n"].sum() / df["mention_count"].sum()) if df["mention_count"].sum() else 0.0
+        log.info("Aggregated %d (source, ticker) rows for %s — %.0f%% of mentions scored",
+                 len(df), today, scored_share * 100)
     return df
 
 
 def upsert_parquet(df: pd.DataFrame, path: Path = PARQUET_PATH) -> Path:
-    """Merge `df` into the cumulative parquet, replacing same-day rows."""
+    """Merge `df` into the cumulative parquet, replacing same-day rows.
+
+    Schema-evolves an older parquet that lacks polarity_mean / polarity_n
+    by filling NaN / 0 — this is what older daily commits look like."""
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
         existing = pd.read_parquet(path)
-        # Drop any prior row for the same (date, ticker, source) — today wins.
+        if "polarity_mean" not in existing.columns:
+            existing["polarity_mean"] = np.nan
+        if "polarity_n" not in existing.columns:
+            existing["polarity_n"] = 0
         merge_keys = ["date", "ticker", "source"]
         merged = pd.concat(
             [existing, df], ignore_index=True
@@ -91,6 +130,7 @@ def upsert_parquet(df: pd.DataFrame, path: Path = PARQUET_PATH) -> Path:
     else:
         merged = df
     merged["date"] = pd.to_datetime(merged["date"]).dt.date
+    merged["polarity_n"] = merged["polarity_n"].fillna(0).astype("int64")
     merged = merged.sort_values(["date", "ticker", "source"]).reset_index(drop=True)
     merged.to_parquet(path, index=False)
     log.info("Upserted parquet → %s  (rows=%d)", path, len(merged))
@@ -104,4 +144,6 @@ def empty_day_row(today: date) -> pd.DataFrame:
         "ticker": TRACKED_TICKERS[0],
         "source": "__empty__",
         "mention_count": 0,
+        "polarity_mean": float("nan"),
+        "polarity_n": 0,
     }])

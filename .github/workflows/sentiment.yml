@@ -27,7 +27,17 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install pandas pyarrow
+        # CPU-only torch keeps the runner image small (~200 MB vs ~2 GB GPU build).
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install transformers pandas pyarrow
+
+      - name: Cache HuggingFace model weights
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: huggingface-prosus-finbert-v1
+          restore-keys: huggingface-prosus-finbert-
 
       - name: Collect sentiment
         run: python scripts/collect_sentiment.py

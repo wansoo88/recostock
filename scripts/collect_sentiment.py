@@ -12,10 +12,16 @@ Pipeline:
 
 Failure policy:
   - One source down → continue with the other; mark missing source absent.
-  - Both down → exit 1, no parquet change.
+  - All sources down → exit 1, no parquet change.
+
+FinBERT polarity:
+  - Computed if transformers + torch are installed (workflow installs them).
+  - Local runs without those packages just write polarity_n=0 and the
+    aggregator carries on. Forecast pipeline tolerates either.
 
 Flags:
-  --dry-run   skip parquet writes (still hits network)
+  --dry-run   skip parquet writes (still hits network).
+  --no-score  skip FinBERT even if available (used to test schema locally).
 """
 from __future__ import annotations
 
@@ -32,6 +38,7 @@ import pandas as pd
 from sentiment.aggregator import aggregate, upsert_parquet, PARQUET_PATH
 from sentiment.sources import yahoo_rss, hackernews, edgar
 from sentiment.ticker_extract import TRACKED_TICKERS
+from sentiment import scorer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -49,8 +56,10 @@ HN_QUERIES = list(TRACKED_TICKERS) + [
 
 def main() -> int:
     dry_run = "--dry-run" in sys.argv
+    no_score = "--no-score" in sys.argv
     today_utc = datetime.now(timezone.utc).date()
-    log.info("Collecting sentiment for %s (dry_run=%s)", today_utc, dry_run)
+    log.info("Collecting sentiment for %s (dry_run=%s, no_score=%s)",
+             today_utc, dry_run, no_score)
 
     all_docs: list[dict] = []
     source_ok: dict[str, bool] = {}
@@ -87,7 +96,20 @@ def main() -> int:
         log.error("All sources failed — no parquet change")
         return 1
 
-    df = aggregate(all_docs, today=today_utc)
+    # Optional polarity scoring.
+    if no_score:
+        polarities = [None] * len(all_docs)
+        log.info("[--no-score] FinBERT skipped; polarity_n will be 0")
+    elif scorer.is_available():
+        log.info("Scoring %d docs with FinBERT…", len(all_docs))
+        polarities = scorer.score_documents(all_docs)
+        scored = sum(1 for p in polarities if p is not None)
+        log.info("FinBERT scored %d / %d docs", scored, len(all_docs))
+    else:
+        polarities = [None] * len(all_docs)
+        log.info("FinBERT unavailable (transformers/torch missing) — polarity_n will be 0")
+
+    df = aggregate(all_docs, today=today_utc, polarities=polarities)
     if df.empty:
         log.warning("No matching ticker mentions in %d docs — writing empty marker", len(all_docs))
 
