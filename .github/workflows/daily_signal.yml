@@ -38,6 +38,10 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           LEVERAGE_EDUCATION_DONE: ${{ secrets.LEVERAGE_EDUCATION_DONE || 'false' }}
           PAGES_URL: ${{ vars.PAGES_URL }}
+          # Strategy v1 productized 2026-05-17 from REVIEW §9 experiments.
+          # Holdout 2024-2026: WR 58%, Payoff 1.20, Sharpe 1.67, MDD -11%, Total +13%.
+          # Set repository variable STRATEGY_MODE=production_v3 to revert.
+          STRATEGY_MODE: ${{ vars.STRATEGY_MODE || 'conviction_v1' }}
         run: python scripts/run_daily.py
 
       - name: Commit signal log and report

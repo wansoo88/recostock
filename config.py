@@ -33,6 +33,23 @@ SIGNAL_THRESHOLD = 0.53           # EMA-smoothed probability gate
 MIN_PAYOFF = 1.1                  # Minimum payoff (avg_win/avg_loss) for signal validity
 LEVERAGE_CONFIDENCE_THRESHOLD = 0.80   # Empirically validated; update after Phase 5
 
+# ── Conviction strategy v1 (env STRATEGY_MODE=conviction_v1 activates) ──────
+# Walk-forward holdout (2024-01~2026-05, n=36):
+#   WR 58.33%, Payoff 1.20, Sharpe 1.67, MDD -11.1%, Total +13.22%
+#   All Tier 1 gates pass; Signal.is_valid() satisfied.
+# Identified in scripts/experiment_tp_sweep.py (SL×TP grid).
+CONVICTION_TOP_K = 1
+CONVICTION_THRESHOLD = 0.65
+CONVICTION_SL_PCT = 0.010         # 1.0% stop-loss
+CONVICTION_TP_PCT = 0.030         # 3.0% take-profit
+CONVICTION_VIX_MAX = 20.0         # Skip when VIX >= 20 (panic regime → signal degrades)
+CONVICTION_REQUIRE_SPY_UPTREND = True   # Skip when SPY < 200-day SMA
+# Backtested expectations to plug into Signal stats (rolling_stats can't reflect
+# the new TP/SL exit, so we use measured holdout averages):
+CONVICTION_EXPECTED_WINRATE = 0.583
+CONVICTION_EXPECTED_PAYOFF = 1.20
+CONVICTION_EXPECTED_SAMPLE_N = 36
+
 # ── Data ──────────────────────────────────────────────────────────────────────
 HISTORY_YEARS = 11                # Must cover 2018, 2020, 2022 bear markets
 

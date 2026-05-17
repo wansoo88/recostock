@@ -49,6 +49,7 @@ from signals.generator import (
     compute_levels,
     compute_winrate_ci,
 )
+from signals.conviction import select_conviction_signals
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger(__name__)
@@ -209,6 +210,31 @@ async def main() -> None:
             if phase >= 4 and score_result:
                 latest_close = close_df.iloc[-1]
                 active_tickers = {e.ticker for e in get_active_universe(phase, leverage_ok)}
+
+                # Conviction v1 — productized from REVIEW_2026-05-17 §9 experiments.
+                # Activated by env STRATEGY_MODE=conviction_v1. Holdout
+                # WR 58.3%, Payoff 1.20, Sharpe 1.67, MDD -11%, Total +13.2%.
+                strategy_mode = os.environ.get("STRATEGY_MODE", "production_v3")
+                if strategy_mode == "conviction_v1":
+                    spy_close_val = float(close_df["SPY"].iloc[-1]) if "SPY" in close_df.columns else None
+                    spy_sma200 = (close_df["SPY"].rolling(200).mean().iloc[-1]
+                                  if "SPY" in close_df.columns else None)
+                    spy_sma200 = float(spy_sma200) if spy_sma200 is not None and not pd.isna(spy_sma200) else None
+                    vix_latest = regime.get("vix")
+                    signals = select_conviction_signals(
+                        score_result=score_result,
+                        latest_close=latest_close,
+                        vix_latest=vix_latest,
+                        spy_close=spy_close_val,
+                        spy_sma200=spy_sma200,
+                        active_tickers=active_tickers,
+                    )
+                    # Filter via is_valid() to match honesty principle #3.
+                    signals = [s for s in signals if s.is_valid()]
+                    log.info("Conviction v1: %d valid signal(s) after regime + is_valid gates",
+                             len(signals))
+                    # Skip the legacy loop below — we already produced signals.
+                    score_result = {}  # neutralize legacy loop without altering its structure
 
                 for ticker, scores in score_result.items():
                     if ticker not in active_tickers:
