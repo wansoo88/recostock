@@ -232,3 +232,70 @@ def test_v2_falls_back_when_ema3_or_ema7_missing(caplog):
     # Falls back to v1 behavior: signal fires
     assert len(sigs) == 1
     assert any("missing ema_proba_3/7" in rec.message for rec in caplog.records)
+
+
+# ── v3 Options-regime overlays (added 2026-05-17) ─────────────────────────────
+
+def test_v3_rejects_when_vix_term_backwardation():
+    """VIX9D/VIX >= 1.0 means term structure inverted — short-term stress."""
+    sr = _make_score_result({"SPY": 0.70})
+    sigs = select_conviction_signals(
+        score_result=sr,
+        latest_close=_make_closes({"SPY": 500.0}),
+        vix_latest=15.0, spy_close=500, spy_sma200=480,
+        active_tickers=ACTIVE,
+        vix9d_latest=16.0,    # 16/15 = 1.067, above threshold 1.0
+        skew_z=0.5,
+    )
+    assert sigs == []
+
+
+def test_v3_rejects_when_skew_elevated():
+    """SKEW z-score >= 1.0 means tail risk priced higher than usual."""
+    sr = _make_score_result({"SPY": 0.70})
+    sigs = select_conviction_signals(
+        score_result=sr,
+        latest_close=_make_closes({"SPY": 500.0}),
+        vix_latest=15.0, spy_close=500, spy_sma200=480,
+        active_tickers=ACTIVE,
+        vix9d_latest=13.0,    # 13/15 = 0.867, OK
+        skew_z=1.5,           # >= 1.0, elevated tail risk
+    )
+    assert sigs == []
+
+
+def test_v3_accepts_when_all_gates_pass():
+    """All v3 gates pass → signal fires with backtested expected stats."""
+    sr = _make_score_result({"SPY": 0.70})
+    sigs = select_conviction_signals(
+        score_result=sr,
+        latest_close=_make_closes({"SPY": 500.0}),
+        vix_latest=15.0, spy_close=500, spy_sma200=480,
+        active_tickers=ACTIVE,
+        vix9d_latest=13.0,    # contango
+        skew_z=0.5,           # tail risk normal
+    )
+    assert len(sigs) == 1
+    s = sigs[0]
+    # v3 expected stats (n=20 holdout):
+    assert s.winrate == round(config.CONVICTION_EXPECTED_WINRATE, 4)  # 0.70
+    assert s.payoff == round(config.CONVICTION_EXPECTED_PAYOFF, 3)     # 1.25
+    assert s.is_valid()
+
+
+def test_v3_degrades_to_v2_when_options_data_missing(caplog):
+    """If VIX9D / SKEW unavailable, log warning and skip those gates."""
+    sr = _make_score_result({"SPY": 0.70})
+    with caplog.at_level("WARNING"):
+        sigs = select_conviction_signals(
+            score_result=sr,
+            latest_close=_make_closes({"SPY": 500.0}),
+            vix_latest=15.0, spy_close=500, spy_sma200=480,
+            active_tickers=ACTIVE,
+            vix9d_latest=None,
+            skew_z=None,
+        )
+    # v3 gates skipped → behaves like v2 → signal fires (Multi-EMA passes since all == 0.70)
+    assert len(sigs) == 1
+    assert any("VIX9D unavailable" in rec.message for rec in caplog.records)
+    assert any("SKEW z-score unavailable" in rec.message for rec in caplog.records)

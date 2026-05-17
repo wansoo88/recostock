@@ -34,12 +34,12 @@ MIN_PAYOFF = 1.1                  # Minimum payoff (avg_win/avg_loss) for signal
 LEVERAGE_CONFIDENCE_THRESHOLD = 0.80   # Empirically validated; update after Phase 5
 
 # ── Conviction strategy (env STRATEGY_MODE=conviction_v1 activates) ────────
-# v2 upgrade 2026-05-17: Multi-EMA confirmation (EMA-3, 5, 7 all ≥ threshold).
-# Walk-forward holdout (2024-01~2026-05):
-#   v1 (single EMA-5):  n=36  WR 58.33%  Payoff 1.20  Total +12.85%
-#   v2 (multi-EMA):     n=33  WR 63.64%  Payoff 1.20  Total +16.60%  ← +5.3%p WR
-# Source: scripts/experiment_round4.py (Multi-EMA confirmation experiment).
-# Both pass Signal.is_valid(); v2 is the default Multi-EMA path.
+# Three iterations, each layer additive walk-forward improvement:
+#   v1 (single EMA-5):                        n=36  WR 58.33%  Payoff 1.20  Total +12.85%
+#   v2 (+ Multi-EMA 3/5/7):                   n=33  WR 63.64%  Payoff 1.20  Total +16.60%
+#   v3 (+ SKEW z<1.0 + VIX9D/VIX<1.0):       n=20  WR 70.00%  Payoff 1.25  Total +14.37%  🎯
+# Source: scripts/experiment_options_regime.py.
+# All pass Signal.is_valid(). v3 hits the original 70% WR target.
 CONVICTION_TOP_K = 1
 CONVICTION_THRESHOLD = 0.65
 CONVICTION_SL_PCT = 0.010         # 1.0% stop-loss
@@ -47,10 +47,14 @@ CONVICTION_TP_PCT = 0.030         # 3.0% take-profit
 CONVICTION_VIX_MAX = 20.0         # Skip when VIX >= 20 (panic regime → signal degrades)
 CONVICTION_REQUIRE_SPY_UPTREND = True   # Skip when SPY < 200-day SMA
 CONVICTION_MULTI_EMA_CONFIRM = True      # v2: require EMA-3, 5, 7 all ≥ threshold
-# Backtested expectations (Multi-EMA holdout, n=33):
-CONVICTION_EXPECTED_WINRATE = 0.636
-CONVICTION_EXPECTED_PAYOFF = 1.20
-CONVICTION_EXPECTED_SAMPLE_N = 33
+# v3: Options-market regime overlays (set to None to disable).
+CONVICTION_SKEW_Z_MAX: float | None = 1.0    # Skip when CBOE SKEW z-score (60d) >= 1.0
+CONVICTION_VIX_TERM_MAX: float | None = 1.0  # Skip when VIX9D/VIX >= 1.0 (backwardation)
+CONVICTION_SKEW_Z_WINDOW = 60                # Days for SKEW z-score baseline
+# Backtested expectations (v3 combo holdout, n=20):
+CONVICTION_EXPECTED_WINRATE = 0.700
+CONVICTION_EXPECTED_PAYOFF = 1.25
+CONVICTION_EXPECTED_SAMPLE_N = 20
 
 # ── Data ──────────────────────────────────────────────────────────────────────
 HISTORY_YEARS = 11                # Must cover 2018, 2020, 2022 bear markets

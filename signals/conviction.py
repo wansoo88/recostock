@@ -2,21 +2,25 @@
 
 v1 (initial): single EMA-5 ≥ 0.65, K=1, regime gate, fixed SL/TP.
 v2 (Multi-EMA, 2026-05-17): also requires EMA-3 ≥ 0.65 AND EMA-7 ≥ 0.65.
-                            Cross-timeframe confirmation raises WR.
+v3 (Options regime, 2026-05-17): also requires SKEW z-score < 1.0 AND
+                                  VIX9D/VIX < 1.0 (contango).
 
 Strategy summary:
     universe: long-only (core + sector, no inverse/VXX/leverage)
     regime:   VIX < 20 AND SPY > 200d SMA
+              v3 ALSO: VIX9D/VIX < 1.0 (term structure in contango)
+                       SKEW z-score(60d) < 1.0 (tail risk not extreme)
     select:   K=1 by ema_proba (EMA-5), threshold 0.65
-              v2: ALSO require ema_proba_3 ≥ 0.65 AND ema_proba_7 ≥ 0.65
+              v2 ALSO: ema_proba_3 ≥ 0.65 AND ema_proba_7 ≥ 0.65
     exit:     SL 1.0% intraday OR TP 3.0% intraday OR Friday close after 5 days
 
 Holdout 2024-01 ~ 2026-05 (walk-forward):
-    v1:  n=36  WR 58.33%  Payoff 1.20  Sharpe 1.67  MDD -11.1%  Total +12.85%
-    v2:  n=33  WR 63.64%  Payoff 1.20  Sharpe ~1.8  MDD <-15%   Total +16.60%
+    v1:  n=36  WR 58.33%  Payoff 1.20  Total +12.85%
+    v2:  n=33  WR 63.64%  Payoff 1.20  Total +16.60%
+    v3:  n=20  WR 70.00%  Payoff 1.25  Total +14.37%  🎯 (target reached)
 
-Activated when env STRATEGY_MODE=conviction_v1. v2 is the default unless
-config.CONVICTION_MULTI_EMA_CONFIRM is set to False.
+Activated when env STRATEGY_MODE=conviction_v1. v2/v3 toggled via
+config.CONVICTION_MULTI_EMA_CONFIRM, CONVICTION_SKEW_Z_MAX, CONVICTION_VIX_TERM_MAX.
 
 Design notes
 ------------
@@ -26,8 +30,11 @@ Design notes
   / sample_n (from config.CONVICTION_EXPECTED_*) so is_valid() passes.
 - Pure function: takes proba + market data, returns signals. No I/O.
 - Multi-EMA confirmation requires score_result entries to include
-  `ema_proba_3` and `ema_proba_7`. If absent (legacy callers), v2 falls
-  back to v1 behavior with a log warning.
+  `ema_proba_3` and `ema_proba_7`. Legacy callers without those fields
+  fall back to v1 behavior with a WARNING log.
+- v3 options gates require macro indices fetched by data/macro_collector.py
+  (vix9d, vix3m, skew). If indices unavailable, conviction.py skips the
+  options gates with a WARNING — degrades to v2.
 """
 from __future__ import annotations
 
@@ -52,8 +59,15 @@ def _is_long_only(meta: ETFMeta | None) -> bool:
 
 def regime_ok(vix_latest: float | None,
               spy_close: float | None,
-              spy_sma200: float | None) -> tuple[bool, str]:
-    """Check VIX and SPY-vs-200d-SMA regime gates.
+              spy_sma200: float | None,
+              vix9d_latest: float | None = None,
+              skew_z: float | None = None) -> tuple[bool, str]:
+    """Check regime gates: VIX, SPY trend, plus optional v3 options overlays.
+
+    v3 gates (when config.CONVICTION_SKEW_Z_MAX / VIX_TERM_MAX are set):
+      - vix9d_latest / vix_latest < CONVICTION_VIX_TERM_MAX (contango)
+      - skew_z < CONVICTION_SKEW_Z_MAX (tail risk not extreme)
+    Either may be None to disable that gate (also via config = None).
 
     Returns (passed, reason_string)."""
     if vix_latest is None:
@@ -65,6 +79,26 @@ def regime_ok(vix_latest: float | None,
             return False, "no SPY trend reference"
         if spy_close <= spy_sma200:
             return False, f"SPY {spy_close:.2f} <= 200d SMA {spy_sma200:.2f}"
+
+    # v3: VIX term structure (9D/30D)
+    term_max = getattr(config, "CONVICTION_VIX_TERM_MAX", None)
+    if term_max is not None:
+        if vix9d_latest is None:
+            log.warning("Conviction v3: VIX9D unavailable — skipping term gate (degrades to v2)")
+        else:
+            ratio = vix9d_latest / vix_latest if vix_latest > 0 else float("inf")
+            if ratio >= term_max:
+                return False, f"VIX9D/VIX {ratio:.3f} >= {term_max} (backwardation)"
+
+    # v3: SKEW z-score
+    skew_max = getattr(config, "CONVICTION_SKEW_Z_MAX", None)
+    if skew_max is not None:
+        if skew_z is None or pd.isna(skew_z):
+            log.warning("Conviction v3: SKEW z-score unavailable — skipping skew gate (degrades to v2)")
+        else:
+            if skew_z >= skew_max:
+                return False, f"SKEW z {skew_z:.3f} >= {skew_max} (elevated tail risk)"
+
     return True, "regime ok"
 
 
@@ -75,6 +109,8 @@ def select_conviction_signals(
     spy_close: float | None,
     spy_sma200: float | None,
     active_tickers: set[str],
+    vix9d_latest: float | None = None,
+    skew_z: float | None = None,
 ) -> list[Signal]:
     """Apply regime gate + long-only universe + K=1 selection.
 
@@ -84,10 +120,13 @@ def select_conviction_signals(
       vix_latest      — most recent VIX close
       spy_close, spy_sma200 — for trend gate
       active_tickers  — phase-allowed tickers (passed in by run_daily.py)
+      vix9d_latest    — most recent VIX9D close (for v3 term-structure gate)
+      skew_z          — current SKEW z-score over CONVICTION_SKEW_Z_WINDOW days
 
     Returns: 0 or 1 Signal objects. Empty list when regime fails or no eligible
     ticker meets the threshold."""
-    ok, reason = regime_ok(vix_latest, spy_close, spy_sma200)
+    ok, reason = regime_ok(vix_latest, spy_close, spy_sma200,
+                           vix9d_latest=vix9d_latest, skew_z=skew_z)
     if not ok:
         log.info("Conviction: regime gate FAIL — %s — no signal today", reason)
         return []

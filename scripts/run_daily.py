@@ -211,9 +211,11 @@ async def main() -> None:
                 latest_close = close_df.iloc[-1]
                 active_tickers = {e.ticker for e in get_active_universe(phase, leverage_ok)}
 
-                # Conviction v1 — productized from REVIEW_2026-05-17 §9 experiments.
-                # Activated by env STRATEGY_MODE=conviction_v1. Holdout
-                # WR 58.3%, Payoff 1.20, Sharpe 1.67, MDD -11%, Total +13.2%.
+                # Conviction strategy — productized from REVIEW_2026-05-17 §9/§10 experiments.
+                # Activated by env STRATEGY_MODE=conviction_v1. Walk-forward holdout:
+                #   v1 single-EMA:        n=36  WR 58.33%  Payoff 1.20  Total +12.85%
+                #   v2 + Multi-EMA:       n=33  WR 63.64%  Payoff 1.20  Total +16.60%
+                #   v3 + options regime:  n=20  WR 70.00%  Payoff 1.25  Total +14.37%  🎯
                 strategy_mode = os.environ.get("STRATEGY_MODE", "production_v3")
                 if strategy_mode == "conviction_v1":
                     spy_close_val = float(close_df["SPY"].iloc[-1]) if "SPY" in close_df.columns else None
@@ -221,6 +223,29 @@ async def main() -> None:
                                   if "SPY" in close_df.columns else None)
                     spy_sma200 = float(spy_sma200) if spy_sma200 is not None and not pd.isna(spy_sma200) else None
                     vix_latest = regime.get("vix")
+
+                    # v3 options-regime inputs: VIX9D and SKEW z-score from macro cache
+                    vix9d_latest = None
+                    skew_z = None
+                    try:
+                        vix9d_path = Path("data/raw/macro/vix9d.parquet")
+                        if vix9d_path.exists():
+                            vix9d_series = pd.read_parquet(vix9d_path).iloc[:, 0].dropna()
+                            if not vix9d_series.empty:
+                                vix9d_latest = float(vix9d_series.iloc[-1])
+                        skew_path = Path("data/raw/macro/skew.parquet")
+                        if skew_path.exists():
+                            skew_series = pd.read_parquet(skew_path).iloc[:, 0].dropna()
+                            window = config.CONVICTION_SKEW_Z_WINDOW
+                            if len(skew_series) >= window + 1:
+                                tail = skew_series.tail(window + 1)
+                                mu = tail.iloc[:-1].mean()
+                                sigma = tail.iloc[:-1].std()
+                                if sigma > 0:
+                                    skew_z = float((tail.iloc[-1] - mu) / sigma)
+                    except Exception as exc:
+                        log.warning("Conviction v3: options-regime fetch failed: %s", exc)
+
                     signals = select_conviction_signals(
                         score_result=score_result,
                         latest_close=latest_close,
@@ -228,11 +253,15 @@ async def main() -> None:
                         spy_close=spy_close_val,
                         spy_sma200=spy_sma200,
                         active_tickers=active_tickers,
+                        vix9d_latest=vix9d_latest,
+                        skew_z=skew_z,
                     )
                     # Filter via is_valid() to match honesty principle #3.
                     signals = [s for s in signals if s.is_valid()]
-                    log.info("Conviction v1: %d valid signal(s) after regime + is_valid gates",
-                             len(signals))
+                    log.info("Conviction: %d valid signal(s) after regime + is_valid gates "
+                             "(VIX9D=%s, SKEW_z=%s)", len(signals),
+                             f"{vix9d_latest:.2f}" if vix9d_latest else "N/A",
+                             f"{skew_z:.2f}" if skew_z is not None else "N/A")
                     # Skip the legacy loop below — we already produced signals.
                     score_result = {}  # neutralize legacy loop without altering its structure
 

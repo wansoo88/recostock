@@ -44,6 +44,10 @@ MACRO_TICKERS = {
     "smh":       "SMH",          # semiconductors (XLK/QQQ context)
     "kre":       "KRE",          # regional banks (XLF context)
     "xop":       "XOP",          # oil & gas producers (XLE context)
+    # Options-market regime indicators (added 2026-05-17 for conviction_v3):
+    "vix9d":     "^VIX9D",       # 9-day VIX (short-term implied vol)
+    "vix3m":     "^VIX3M",       # 3-month VIX (medium-term)
+    "skew":      "^SKEW",        # CBOE SKEW Index (tail-risk pricing)
 }
 
 
