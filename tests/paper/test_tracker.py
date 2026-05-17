@@ -124,6 +124,35 @@ def test_close_positions_no_open():
     assert result.iloc[0]["close_date"] == "2026-01-10"  # unchanged
 
 
+# ── Same-day idempotency guards (added 2026-05-17 after duplicate-trade bug) ──
+
+def test_open_positions_skips_same_day_duplicate():
+    """Re-running on the same day must not re-open a ticker already opened today."""
+    sig = _make_signal("SPY", entry=500.0)
+    today = pd.Timestamp("2026-01-10")
+    closes = _close_prices(("SPY", 501.0))
+
+    # First call: opens SPY
+    first = open_positions([sig], today, closes, trades=pd.DataFrame())
+    assert len(first) == 1
+
+    # Simulate a second invocation later the same day: pass `first` as history
+    second = open_positions([sig], today, closes, trades=first)
+    assert second.empty, "must not duplicate same-day open"
+
+
+def test_close_exited_skips_same_day():
+    """A position opened today must NOT be closed on the same day even if signal turned off."""
+    today = pd.Timestamp("2026-01-10")
+    trade = _make_open_trade("SPY", entry=500.0, open_date=today.date().isoformat())
+    closes = _close_prices(("SPY", 510.0))
+    result = close_positions(trade, today, closes)
+    # close_positions calls close_exited_positions with empty signal_tickers.
+    # Pre-fix: position closes with pnl = -0.0025 (cost only).
+    # Post-fix: same-day guard prevents the close, position stays open.
+    assert result.iloc[0]["close_date"] is None, "must not close on the same day as open"
+
+
 # ── compute_metrics ────────────────────────────────────────────────────────────
 
 def _make_closed_trades(pnl_list, close_dates=None):

@@ -61,23 +61,48 @@ def _align_schema(df: pd.DataFrame) -> pd.DataFrame:
 
 # ── Position management ───────────────────────────────────────────────────────
 
+def _opened_today(trades: pd.DataFrame, today_str: str) -> set[str]:
+    """Return tickers that already have a row with open_date == today.
+
+    Used to make `open_positions` idempotent so repeated same-day runs
+    (e.g., GitHub Actions concurrency edge cases) don't create duplicate
+    entries. Pre-2026-05-17 saw 4 duplicate DIA rows on the same Friday
+    when the cron fired twice and the signal flickered around threshold.
+    """
+    if trades.empty or "open_date" not in trades.columns:
+        return set()
+    today_mask = trades["open_date"].astype(str) == today_str
+    return set(trades.loc[today_mask, "ticker"].tolist())
+
+
 def open_positions(
     signals: list,
     today: pd.Timestamp,
     close_prices: pd.Series,
     already_open: set[str] | None = None,
+    trades: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """Open NEW positions (not carry-overs). already_open tickers are skipped."""
+    """Open NEW positions (not carry-overs). already_open tickers are skipped.
+
+    `trades` (full history) is consulted to skip tickers already opened today
+    in a prior invocation — same-day idempotency guard.
+    """
     already_open = already_open or set()
+    today_str = today.date().isoformat()
+    opened_today_set = _opened_today(trades, today_str) if trades is not None else set()
     rows = []
+    skipped_dup = 0
     for sig in signals:
         if sig.ticker in already_open:
             continue   # carry-over: position persists, no new entry cost
+        if sig.ticker in opened_today_set:
+            skipped_dup += 1
+            continue   # same-day idempotency: never open the same ticker twice on one date
         price = close_prices.get(sig.ticker)
         if price is None or price <= 0:
             continue
         rows.append({
-            "open_date": today.date().isoformat(),
+            "open_date": today_str,
             "ticker": sig.ticker,
             "entry_price": float(price),
             "direction": sig.direction,
@@ -93,6 +118,8 @@ def open_positions(
         })
     if rows:
         log.info("Paper: opened %d new position(s) on %s", len(rows), today.date())
+    if skipped_dup:
+        log.info("Paper: skipped %d duplicate same-day open(s)", skipped_dup)
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
@@ -121,6 +148,13 @@ def close_exited_positions(
         ticker = trades.at[idx, "ticker"]
         if ticker in signal_tickers:
             continue  # carry-over: signal still ON, keep position open
+
+        # Same-day exit guard: never close on the same date the position
+        # was opened. Pre-2026-05-17, signals oscillating around 0.58 in
+        # multi-run scenarios produced open→close in one day, wasting only
+        # the 0.25% cost. A real exit requires at least one trading day.
+        if str(trades.at[idx, "open_date"]) == today_str:
+            continue
 
         # Signal turned OFF: close the position
         exit_price = close_prices.get(ticker)
@@ -168,7 +202,9 @@ def rebalance_friday(
     trades = close_exited_positions(trades, today, close_prices, signal_tickers)
 
     # Step 2: Open positions for new signals (not already in portfolio)
-    new_rows = open_positions(signals, today, close_prices, already_open=open_tickers)
+    # Pass `trades` for same-day idempotency check.
+    new_rows = open_positions(signals, today, close_prices,
+                              already_open=open_tickers, trades=trades)
 
     carry_count = len(signal_tickers & open_tickers)
     if carry_count:
