@@ -96,7 +96,104 @@
 </div>
 
 <script>
-/* REPORT_DATA_PLACEHOLDER */
+const REPORT = {
+  "date": "2026-05-19",
+  "regime": {
+    "label": "normal",
+    "exposure": 1.0,
+    "vix": 18.43,
+    "credit_spread": 3.2,
+    "yield_spread": 0.05,
+    "gates": [
+      {
+        "name": "VIX 절댓값",
+        "value": 18.43,
+        "threshold": 20.0,
+        "op": "<",
+        "passed": true,
+        "format": ".2f",
+        "desc": "공포지수 (≥20 = 패닉)"
+      },
+      {
+        "name": "SPY 추세",
+        "value": 739.17,
+        "threshold": 673.34,
+        "op": ">",
+        "passed": true,
+        "format": ".2f",
+        "desc": "200일 이동평균 대비"
+      },
+      {
+        "name": "VIX 단기구조",
+        "value": 0.888,
+        "threshold": 1.0,
+        "op": "<",
+        "passed": true,
+        "format": ".3f",
+        "desc": "VIX9D/VIX (≥1.0 = backwardation)"
+      },
+      {
+        "name": "SKEW z-score",
+        "value": 0.381,
+        "threshold": 1.0,
+        "op": "<",
+        "passed": true,
+        "format": "+.2f",
+        "desc": "60일 SKEW 표준화"
+      },
+      {
+        "name": "MOVE z-score",
+        "value": 0.133,
+        "threshold": 1.0,
+        "op": "<",
+        "passed": true,
+        "format": "+.2f",
+        "desc": "60일 채권변동성"
+      }
+    ],
+    "strategy": {
+      "version": "conviction_v4",
+      "description": "K=1 + Multi-EMA + 5-gate regime + 고정 SL 1.0%/TP 3.0%",
+      "holdout_wr": 0.7368
+    }
+  },
+  "signals": [
+    {
+      "ticker": "QQQ",
+      "name": "Invesco QQQ",
+      "dir": "long",
+      "leverage": 1,
+      "entry": 708.93,
+      "tp": 730.2,
+      "sl": 701.84,
+      "winrate": 0.737,
+      "sampleN": 19,
+      "ci": [
+        0.5,
+        0.9
+      ],
+      "payoff": 1.25,
+      "expectancy": 0.0003,
+      "confidence": 0.71,
+      "factors": {}
+    }
+  ],
+  "paper": {
+    "sharpe": 0.0,
+    "mdd": 0.0,
+    "winrate": 0.0,
+    "n_trades": 0,
+    "avg_win": 0.0,
+    "avg_loss": 0.0,
+    "payoff": 0.0,
+    "total_return": 0.0,
+    "n_weeks": 0,
+    "weeks_elapsed": 0
+  },
+  "paperOpen": [],
+  "gates": [],
+  "strategy": {}
+};
 
 (function () {
   if (typeof REPORT === 'undefined') {

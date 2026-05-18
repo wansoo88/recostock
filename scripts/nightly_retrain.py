@@ -300,11 +300,13 @@ def main() -> int:
             shutil.copy2(importance_src, IMPORTANCE_FILE)
         log.info("SAFETY GATE PASSED: %s", reason)
         log.info("Promoted weights → %s", WEIGHTS_FILE)
-    _notify_telegram(
-        f"recostock retrain OK ({now_utc} UTC)\n"
-        f"mean OOS AUC {mean_oos:.4f}, min {min_oos:.4f}, rows {len(X)}\n"
-        f"weights → {WEIGHTS_FILE.name}"
-    )
+    # User-feedback 2026-05-19: PASS notifications arriving at unhelpful
+    # hours (01:50 KST) were noise. Successful retrains are silent — record
+    # in retrain_history.csv only. Failures still alert (see _evaluate_safety
+    # branch above) because those need user attention.
+    log.info("recostock retrain OK — mean OOS AUC %.4f, min %.4f, rows %d, weights → %s "
+             "(notification suppressed; check data/logs/retrain_history.csv if needed)",
+             mean_oos, min_oos, len(X), WEIGHTS_FILE.name)
     return 0
 
 

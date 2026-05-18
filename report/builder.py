@@ -25,8 +25,18 @@ def build_report(
     report_date: date,
     paper_metrics: dict | None = None,
     paper_open: list[dict] | None = None,
+    gates: list[dict] | None = None,
+    strategy_info: dict | None = None,
 ) -> Path:
-    """Write YYYY-MM-DD.html to docs/. Returns the output path."""
+    """Write YYYY-MM-DD.html to docs/. Returns the output path.
+
+    `gates` (new 2026-05-19): list of {name, value, threshold, op, passed} dicts
+    for the v4 conviction regime gates. Rendered as a visual status panel so
+    the user can see WHY today's signal fired (or didn't).
+
+    `strategy_info` (new 2026-05-19): {version, description} for the strategy
+    that produced today's signals. Shown next to the regime panel.
+    """
     template = TEMPLATE_PATH.read_text(encoding="utf-8")
 
     valid_signals = [s for s in signals if s.is_valid()]
@@ -36,6 +46,8 @@ def build_report(
         "signals": [_signal_to_dict(s) for s in valid_signals],
         "paper": paper_metrics or {},
         "paperOpen": paper_open or [],
+        "gates": gates or [],
+        "strategy": strategy_info or {},
     }
 
     injected = template.replace(

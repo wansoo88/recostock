@@ -231,9 +231,9 @@ async def main() -> None:
                 strategy_mode = os.environ.get("STRATEGY_MODE", "production_v3")
                 if strategy_mode == "conviction_v1":
                     spy_close_val = float(close_df["SPY"].iloc[-1]) if "SPY" in close_df.columns else None
-                    spy_sma200 = (close_df["SPY"].rolling(200).mean().iloc[-1]
+                    spy_sma200_val = (close_df["SPY"].rolling(200).mean().iloc[-1]
                                   if "SPY" in close_df.columns else None)
-                    spy_sma200 = float(spy_sma200) if spy_sma200 is not None and not pd.isna(spy_sma200) else None
+                    spy_sma200 = float(spy_sma200_val) if spy_sma200_val is not None and not pd.isna(spy_sma200_val) else None
                     vix_latest = regime.get("vix")
 
                     # v3 options-regime inputs: VIX9D and SKEW z-score from macro cache
@@ -290,6 +290,30 @@ async def main() -> None:
                              f"{vix9d_latest:.2f}" if vix9d_latest else "N/A",
                              f"{skew_z:+.2f}" if skew_z is not None else "N/A",
                              f"{move_z:+.2f}" if move_z is not None else "N/A")
+                    # Build gates panel for HTML report — user sees WHY signal fired/not
+                    vix_term_ratio = (vix9d_latest / vix_latest) if (vix9d_latest and vix_latest) else None
+                    regime["gates"] = [
+                        {"name": "VIX 절댓값", "value": vix_latest, "threshold": config.CONVICTION_VIX_MAX,
+                         "op": "<", "passed": vix_latest is not None and vix_latest < config.CONVICTION_VIX_MAX,
+                         "format": ".2f", "desc": "공포지수 (≥20 = 패닉)"},
+                        {"name": "SPY 추세", "value": spy_close_val, "threshold": spy_sma200,
+                         "op": ">", "passed": spy_close_val is not None and spy_sma200 is not None and spy_close_val > spy_sma200,
+                         "format": ".2f", "desc": "200일 이동평균 대비"},
+                        {"name": "VIX 단기구조", "value": vix_term_ratio, "threshold": config.CONVICTION_VIX_TERM_MAX,
+                         "op": "<", "passed": vix_term_ratio is not None and vix_term_ratio < config.CONVICTION_VIX_TERM_MAX,
+                         "format": ".3f", "desc": "VIX9D/VIX (≥1.0 = backwardation 스트레스)"},
+                        {"name": "SKEW z-score", "value": skew_z, "threshold": config.CONVICTION_SKEW_Z_MAX,
+                         "op": "<", "passed": skew_z is not None and not pd.isna(skew_z) and skew_z < config.CONVICTION_SKEW_Z_MAX,
+                         "format": "+.2f", "desc": "60일 SKEW 표준화 (≥1.0 = 꼬리리스크↑)"},
+                        {"name": "MOVE z-score", "value": move_z, "threshold": config.CONVICTION_MOVE_Z_MAX,
+                         "op": "<", "passed": move_z is not None and not pd.isna(move_z) and move_z < config.CONVICTION_MOVE_Z_MAX,
+                         "format": "+.2f", "desc": "60일 채권변동성 (≥1.0 = bond stress)"},
+                    ]
+                    regime["strategy"] = {
+                        "version": "conviction_v4",
+                        "description": "K=1 + Multi-EMA(3,5,7) + 5-gate regime + 고정 SL 1.0%/TP 3.0%",
+                        "holdout_wr": 0.7368,
+                    }
                     # Skip the legacy loop below — we already produced signals.
                     score_result = {}  # neutralize legacy loop without altering its structure
 
