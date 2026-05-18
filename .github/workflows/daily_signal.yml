@@ -1,11 +1,17 @@
 name: Daily ETF Signal
 
 on:
-  # US market closes 16:00 ET = 21:00 UTC (standard) / 20:00 UTC (DST)
-  # Run both crons so neither DST boundary is missed
+  # 13:00 UTC = 22:00 KST (Asia/Seoul). User receives the signal before the
+  # US market opens that day (EDT open 13:30 UTC = 22:30 KST → 30 min lead;
+  # EST open 14:30 UTC = 23:30 KST → 90 min lead). Korea has no DST so a
+  # single cron covers both halves of the year cleanly.
+  #
+  # By running BEFORE today's US session opens, the pipeline uses the most
+  # recent fully-closed US day (yesterday) for inference. data/collector.py
+  # already drops today's incomplete bar; at 13:00 UTC today's bar is the
+  # current open session anyway, so the filter is a no-op here.
   schedule:
-    - cron: "30 20 * * 1-5"   # 20:30 UTC — covers DST (EDT, UTC-4)
-    - cron: "30 21 * * 1-5"   # 21:30 UTC — covers standard (EST, UTC-5)
+    - cron: "0 13 * * 1-5"    # 13:00 UTC Mon-Fri = 22:00 KST same day
   workflow_dispatch:            # Allow manual trigger for testing
 
 concurrency:
