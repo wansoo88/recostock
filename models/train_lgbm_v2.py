@@ -28,6 +28,12 @@ log = logging.getLogger(__name__)
 # ── KEEP macro features (from analyze_macro_ic.py pooled h=5) ─────────────────
 
 MACRO_KEEP_FEATURES = [
+    # Validated v2/v3 set (analyze_macro_ic.py pooled h=5).
+    # NOTE 2026-05-18: tested adding regime features (skew_z, move_z,
+    # vix_term_9d/3m) — model AUC improved by +0.01 but conviction_v4 strategy
+    # Holdout WR collapsed 73.68% → 52.94%. Hypothesis: double-counting with
+    # signals/conviction.py regime gates dilutes ticker-direction signal.
+    # See scripts/compare_v5_vs_v4.py for the experiment. Reverted.
     "oil_chg_5d",
     "hy_ig_z",
     "vvix_z",

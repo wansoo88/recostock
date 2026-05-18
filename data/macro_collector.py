@@ -40,6 +40,7 @@ MACRO_TICKERS = {
     "hyg":       "HYG",          # high-yield corporate bonds
     "lqd":       "LQD",          # investment-grade corporate bonds
     "tlt":       "TLT",          # 20y+ treasuries
+    "vix":       "^VIX",         # 30-day implied vol (needed for VIX-term features in model)
     "vvix":      "^VVIX",        # vol of vol
     "smh":       "SMH",          # semiconductors (XLK/QQQ context)
     "kre":       "KRE",          # regional banks (XLF context)

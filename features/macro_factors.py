@@ -101,6 +101,35 @@ def build_global_macro(date_index: pd.DatetimeIndex,
     if vvix is not None:
         df["vvix_z"] = _z(vvix, 63)
 
+    # ── v5 regime features (added 2026-05-18) ───────────────────────────────
+    # Previously used only as binary regime gates in signals/conviction.py;
+    # now exposed to the model as continuous features so it can learn
+    # graded effects rather than yes/no thresholds.
+    vix = get("vix") if "vix" in macro else None
+    vix9d = get("vix9d")
+    vix3m = get("vix3m")
+    skew = get("skew")
+    move = get("move")
+
+    # SKEW z-score (60d) — tail-risk pricing
+    if skew is not None:
+        df["skew_z"] = _z(skew, 60)
+        df["skew_chg_5d"] = skew.pct_change(5)
+
+    # MOVE z-score (60d) — bond-market volatility
+    if move is not None:
+        df["move_z"] = _z(move, 60)
+        df["move_chg_5d"] = move.pct_change(5)
+
+    # VIX term structure ratios (when both ends available)
+    if vix9d is not None and vix is not None:
+        ratio_9d = (vix9d / vix.replace(0, np.nan))
+        df["vix_term_9d"] = ratio_9d
+        df["vix_term_9d_z"] = _z(ratio_9d, 60)
+    if vix3m is not None and vix is not None:
+        ratio_3m = (vix / vix3m.replace(0, np.nan))
+        df["vix_term_3m"] = ratio_3m
+
     return df
 
 

@@ -42,7 +42,9 @@ MIN_ACTIVE_FRIDAYS = 8
 TOP_K = 5
 PRODUCTION_THRESHOLD = 0.58
 
-# Same KEEP macro features as v2/v3 training
+# MACRO_KEEP_FEATURES mirrors models/train_lgbm_v2.py — must stay in sync so
+# inference reproduces training-time feature ordering.
+# v5 (2026-05-18) regime features tested and REVERTED — see train_lgbm_v2.py comment.
 MACRO_KEEP_FEATURES = [
     "oil_chg_5d", "hy_ig_z", "vvix_z", "y10_z", "oil_z", "tlt_z",
     "y10_chg_5d", "term_spread", "gold_chg_21d", "hy_ig_logratio", "dxy_z",
