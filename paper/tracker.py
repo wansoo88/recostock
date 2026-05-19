@@ -30,9 +30,16 @@ _NULLABLE_COLS = {"close_date": "object", "exit_price": "float64",
 # ── Persistence ───────────────────────────────────────────────────────────────
 
 def load_trades() -> pd.DataFrame:
-    if TRADES_PATH.exists():
-        return pd.read_parquet(TRADES_PATH)
-    return pd.DataFrame(columns=_SCHEMA_COLS)
+    if not TRADES_PATH.exists():
+        return pd.DataFrame(columns=_SCHEMA_COLS)
+    trades = pd.read_parquet(TRADES_PATH)
+    # Parquet object-column round-trip can stringify Python None → "None" in
+    # mixed-type cols. Normalize nullable cols so downstream .isna()/.notna()
+    # checks are reliable (DIA 2026-05-15 case).
+    for col in _NULLABLE_COLS:
+        if col in trades.columns:
+            trades[col] = trades[col].replace({"None": None, "NaT": None, "nan": None, "": None})
+    return trades
 
 
 def save_trades(trades: pd.DataFrame) -> None:
