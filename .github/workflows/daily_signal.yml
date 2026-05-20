@@ -1,18 +1,13 @@
 name: Daily ETF Signal
 
 on:
-  # 13:00 UTC = 22:00 KST (Asia/Seoul). User receives the signal before the
-  # US market opens that day (EDT open 13:30 UTC = 22:30 KST → 30 min lead;
-  # EST open 14:30 UTC = 23:30 KST → 90 min lead). Korea has no DST so a
-  # single cron covers both halves of the year cleanly.
-  #
-  # By running BEFORE today's US session opens, the pipeline uses the most
-  # recent fully-closed US day (yesterday) for inference. data/collector.py
-  # already drops today's incomplete bar; at 13:00 UTC today's bar is the
-  # current open session anyway, so the filter is a no-op here.
-  schedule:
-    - cron: "0 13 * * 1-5"    # 13:00 UTC Mon-Fri = 22:00 KST same day
-  workflow_dispatch:            # Allow manual trigger for testing
+  # Triggered externally via workflow_dispatch by an Ubuntu-server cron at
+  # 22:00 KST (13:00 UTC) Mon-Fri. GitHub's native `schedule` trigger was
+  # removed: it is best-effort and routinely delayed 1-3h or skipped, which
+  # is unacceptable for a signal that must land before the US open. The
+  # external cron POSTs the dispatch API, which queues within seconds.
+  # See scripts/trigger_daily_signal.sh.
+  workflow_dispatch:
 
 concurrency:
   group: daily-signal
