@@ -52,6 +52,30 @@ async def send_daily_signal(
     if not signals:
         lines.append("오늘 유효 시그널 없음")
 
+    # Long-only candidate watchlist + top pick (added 2026-05-20).
+    # Shorts intentionally excluded — backtests showed no edge.
+    candidates = regime.get("candidates") or []
+    if candidates:
+        thr_c = regime.get("candidateThreshold", 0.65)
+        passed = [c for c in candidates if c.get("passed")]
+        pick = passed[0] if passed else candidates[0]
+        if passed:
+            lines.append(
+                f"🎯 TOP PICK: {pick['ticker']} (확신도 {pick['confidence']:.3f}) "
+                f"진입 ${pick['entry']:.2f} / TP ${pick['tp']:.2f} / SL ${pick['sl']:.2f}"
+            )
+        else:
+            lines.append(
+                f"🎯 TOP PICK: 대기 — {pick['ticker']} 확신도 {pick['confidence']:.3f} "
+                f"(기준 {thr_c:.2f} 미달, 가장 근접)"
+            )
+        top5 = candidates[:5]
+        wl = ", ".join(
+            f"{c['ticker']} {c['confidence']:.2f}{'✅' if c.get('passed') else ''}"
+            for c in top5
+        )
+        lines.append(f"📋 롱 후보 TOP5: {wl}")
+
     if report_url:
         lines.append(f"상세(적중률·근거·팩터): {report_url}")
     lines.append("⚠️ 수동 실행 · 진입가 미충족 시 미진입")

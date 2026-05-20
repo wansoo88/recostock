@@ -314,6 +314,46 @@ async def main() -> None:
                         "description": "K=1 + Multi-EMA(3,5,7) + 5-gate regime + 고정 SL 1.0%/TP 3.0%",
                         "holdout_wr": 0.7368,
                     }
+
+                    # Long-only candidate watchlist — rank the full core+sector
+                    # universe by model confidence with price levels, so the user
+                    # sees WHICH names are closest to firing even on a 0-signal day.
+                    # Shorts are intentionally absent: inverse / inverted-proba
+                    # backtests (2026-05-20) showed no edge — negative expectancy
+                    # and negative Sharpe across every threshold and regime gate.
+                    thr_c = config.CONVICTION_THRESHOLD
+                    candidates: list[dict] = []
+                    for tk, sc in score_result.items():
+                        m = UNIVERSE_BY_TICKER.get(tk)
+                        if m is None or m.category not in ("core", "sector"):
+                            continue
+                        if tk not in active_tickers:
+                            continue
+                        e5 = sc.get("ema_proba")
+                        if e5 is None:
+                            continue
+                        e3, e7 = sc.get("ema_proba_3"), sc.get("ema_proba_7")
+                        px = float(latest_close.get(tk, 0.0))
+                        if px <= 0:
+                            continue
+                        passed = (float(e5) >= thr_c and e3 is not None and e7 is not None
+                                  and float(e3) >= thr_c and float(e7) >= thr_c)
+                        est_ev = (float(e5) * config.CONVICTION_TP_PCT
+                                  - (1 - float(e5)) * config.CONVICTION_SL_PCT
+                                  - config.TOTAL_COST_ROUNDTRIP)
+                        candidates.append({
+                            "ticker": tk, "name": m.name,
+                            "confidence": round(float(e5), 4),
+                            "entry": round(px, 2),
+                            "tp": round(px * (1 + config.CONVICTION_TP_PCT), 2),
+                            "sl": round(px * (1 - config.CONVICTION_SL_PCT), 2),
+                            "estEv": round(est_ev, 5),
+                            "passed": bool(passed),
+                        })
+                    candidates.sort(key=lambda c: c["confidence"], reverse=True)
+                    regime["candidates"] = candidates
+                    regime["candidateThreshold"] = thr_c
+
                     # Skip the legacy loop below — we already produced signals.
                     score_result = {}  # neutralize legacy loop without altering its structure
 

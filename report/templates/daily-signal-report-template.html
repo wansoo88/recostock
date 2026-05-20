@@ -33,6 +33,24 @@
   .gate-badge { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; }
   .gate-pass { background: rgba(72, 187, 120, 0.18); color: var(--green); }
   .gate-fail { background: rgba(252, 129, 129, 0.18); color: var(--red); }
+
+  /* Long-only candidate watchlist (added 2026-05-20) */
+  .cand-panel { background: var(--surface); border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; }
+  .cand-panel .ttl { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; }
+  .toppick { background: linear-gradient(90deg, #234155 0%, #1a202c 100%); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; border-left: 4px solid var(--blue); }
+  .toppick .tp-tag { font-size: 11px; color: var(--blue); text-transform: uppercase; letter-spacing: .5px; font-weight: 700; }
+  .toppick .tp-tk { font-size: 20px; font-weight: 700; margin: 2px 0; }
+  .toppick .tp-reason { font-size: 12px; color: var(--text); line-height: 1.5; margin-top: 6px; }
+  .toppick.waiting { border-left-color: var(--amber); }
+  .cand-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .cand-table th { text-align: right; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .cand-table th:first-child, .cand-table th:nth-child(2) { text-align: left; }
+  .cand-table td { padding: 6px 8px; border-bottom: 1px solid #14181f; text-align: right; font-variant-numeric: tabular-nums; }
+  .cand-table td:first-child, .cand-table td:nth-child(2) { text-align: left; }
+  .cand-table tr:last-child td { border-bottom: none; }
+  .cand-light { font-size: 13px; }
+  .conf-cell { font-weight: 700; }
+  .conf-pass { color: var(--green); } .conf-near { color: var(--amber); } .conf-low { color: var(--muted); }
   .section-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 24px 0 10px; }
   .signal-card { background: var(--surface); border-radius: 10px; padding: 16px; margin-bottom: 12px; border-left: 4px solid var(--green); }
   .signal-card.inverse { border-left-color: var(--red); }
@@ -83,6 +101,8 @@
 </div>
 
 <div id="gates-panel"></div>
+<div id="toppick-panel"></div>
+<div id="candidates-panel"></div>
 
 <div id="core-section"></div>
 <div id="leverage-section"></div>
@@ -162,6 +182,56 @@
           <span class="overall ${overallCls}">${overallTxt}</span>
         </div>
         ${rows}
+      </div>`;
+  }
+
+  // Long-only candidate watchlist + top pick (added 2026-05-20)
+  const cands = REPORT.regime.candidates || [];
+  const thrC = REPORT.regime.candidateThreshold || 0.65;
+  if (cands.length) {
+    const near = thrC - 0.05;
+    const confCls = c => c.passed ? 'conf-pass' : (c.confidence >= near ? 'conf-near' : 'conf-low');
+    const light = c => c.passed ? '🟢' : (c.confidence >= near ? '🟡' : '🔴');
+    const rows = cands.map(c => `
+      <tr>
+        <td>${light(c)} <strong>${c.ticker}</strong></td>
+        <td style="color:var(--muted)">${c.name}</td>
+        <td class="conf-cell ${confCls(c)}">${c.confidence.toFixed(3)}</td>
+        <td>$${c.entry.toFixed(2)}</td>
+        <td style="color:var(--green)">$${c.tp.toFixed(2)}</td>
+        <td style="color:var(--red)">$${c.sl.toFixed(2)}</td>
+        <td>${(c.estEv*100>=0?'+':'')}${(c.estEv*100).toFixed(2)}%</td>
+      </tr>`).join('');
+    document.getElementById('candidates-panel').innerHTML = `
+      <div class="cand-panel">
+        <div class="ttl">롱 후보 워치리스트 — 모델확신도순 (기준 ${thrC.toFixed(2)} · 🟢통과 🟡근접 🔴미달)</div>
+        <table class="cand-table">
+          <thead><tr>
+            <th>종목</th><th>이름</th><th>확신도</th><th>진입</th><th>목표(TP+3%)</th><th>손절(SL-1%)</th><th>기대수익*</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
+          *기대수익 = 확신도×(+3%)−(1−확신도)×(−1%)−비용 0.25%. 모델 기반 추정이며 백테스트 검증값 아님.<br>
+          검증된 성과(Holdout WR 73.68%·손익비 1.25)는 🟢 통과 종목 진입에만 적용. 숏(인버스)은 백테스트 결과 알파 없어 미포함.
+        </div>
+      </div>`;
+
+    // Top pick: best candidate that cleared the gate; else nearest as 대기.
+    const passed = cands.filter(c => c.passed);
+    const pick = passed.length ? passed[0] : cands[0];
+    const isWaiting = !passed.length;
+    document.getElementById('toppick-panel').innerHTML = `
+      <div class="toppick ${isWaiting ? 'waiting' : ''}">
+        <div class="tp-tag">${isWaiting ? '⏳ 오늘의 TOP PICK — 대기 (진입 조건 미충족)' : '🎯 오늘의 TOP PICK — 진입 가능'}</div>
+        <div class="tp-tk">${pick.ticker} · ${pick.name}</div>
+        <div class="tp-reason">
+          모델확신도 <strong>${pick.confidence.toFixed(3)}</strong> (기준 ${thrC.toFixed(2)})
+          · 진입 $${pick.entry.toFixed(2)} · 목표 $${pick.tp.toFixed(2)} · 손절 $${pick.sl.toFixed(2)}<br>
+          ${isWaiting
+            ? `오늘은 9개 롱 후보 중 0.65를 넘긴 종목이 없어 <strong>진입하지 않습니다.</strong> 위 종목이 확신도 1위로 가장 근접 — 0.65 돌파 시 첫 후보입니다.`
+            : `9개 롱 후보 중 확신도 1위로 게이트를 통과했습니다. 손익비 3:1 (TP +3% / SL −1%) 구조.`}
+        </div>
       </div>`;
   }
 
