@@ -104,6 +104,7 @@
 <div id="gates-panel"></div>
 <div id="toppick-panel"></div>
 <div id="candidates-panel"></div>
+<div id="feardip-panel"></div>
 
 <div id="core-section"></div>
 <div id="leverage-section"></div>
@@ -247,6 +248,37 @@
           ${isWaiting
             ? `오늘은 9개 롱 후보 중 0.65를 넘긴 종목이 없어 <strong>진입하지 않습니다.</strong> 위 종목이 확신도 1위로 가장 근접 — 0.65 돌파 시 첫 후보입니다.`
             : `9개 롱 후보 중 확신도 1위로 게이트를 통과했습니다. 손익비 3:1 (TP +3% / SL −1%) 구조.`}
+        </div>
+      </div>`;
+  }
+
+  // Fear-dip experimental signal (paper-only, added 2026-05-20)
+  const fd = REPORT.regime.fearDip;
+  if (fd) {
+    const pm = fd.paper || {};
+    const pct = fd.percentile != null ? (fd.percentile * 100).toFixed(0) + '%' : '—';
+    const stateTxt = fd.isEntry
+      ? `🔵 오늘 진입 신호 — SPY 공포매수 (공포 백분위 ${pct})`
+      : `대기 — 공포 백분위 ${pct} (상위 15% 진입)`;
+    const stateCls = fd.isEntry ? 'conf-pass' : 'conf-low';
+    const totCls = (pm.total || 0) >= 0 ? 'pos' : 'neg';
+    document.getElementById('feardip-panel').innerHTML = `
+      <div class="cand-panel" style="border:1px dashed var(--blue)">
+        <div class="ttl">🧪 공포매수 (실험 · 페이퍼 전용 · 실전 아님)</div>
+        <div style="font-size:13px;margin-bottom:8px"><span class="${stateCls}" style="font-weight:700">${stateTxt}</span></div>
+        <table class="cand-table">
+          <thead><tr><th>페이퍼 거래</th><th>승률</th><th>평균손익</th><th>누적</th><th>보유중</th></tr></thead>
+          <tbody><tr>
+            <td>${pm.n || 0}건</td>
+            <td>${((pm.winrate || 0) * 100).toFixed(0)}%</td>
+            <td>${((pm.avg_pnl || 0) * 100).toFixed(2)}%</td>
+            <td class="${totCls}">${((pm.total || 0) * 100).toFixed(1)}%</td>
+            <td>${pm.open || 0}건</td>
+          </tr></tbody>
+        </table>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
+          숏 전략 9종 전부 실패 → 그 거울상으로 발견한 LONG 신호. 공포 극단(VIX·신용·단기구조 스트레스)에서 SPY 매수, 10일 보유.
+          Holdout 백테스트 Sharpe 1.25지만 표본 작아 <strong>페이퍼로 검증 중</strong>입니다. 실전 매매 신호가 아닙니다.
         </div>
       </div>`;
   }

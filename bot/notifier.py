@@ -76,6 +76,13 @@ async def send_daily_signal(
         )
         lines.append(f"📋 롱 후보 TOP5: {wl}")
 
+    # Fear-dip experimental signal (paper-only) — only surface on an entry day.
+    fd = regime.get("fearDip")
+    if fd and fd.get("isEntry"):
+        pct = fd.get("percentile")
+        pct_s = f"{pct*100:.0f}%" if pct is not None else "—"
+        lines.append(f"🧪 [실험·페이퍼] 공포매수 진입신호 — SPY (공포 백분위 {pct_s}, 10일 보유). 실전 아님")
+
     if report_url:
         lines.append(f"상세(적중률·근거·팩터): {report_url}")
     lines.append("⚠️ 수동 실행 · 진입가 미충족 시 미진입")

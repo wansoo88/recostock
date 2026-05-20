@@ -445,6 +445,35 @@ async def main() -> None:
         except Exception as exc:
             log.warning("Paper metrics unavailable: %s", exc)
 
+    # ── Fear-dip experimental signal (paper-only, added 2026-05-20) ───────────
+    # Mirror of the exhausted short search: every directional/pair/put short of
+    # the bearish composite lost, but BUYING SPY on its causal extreme is
+    # OOS-consistent. Paper track only — accumulates an out-of-sample record
+    # before any Tier gating. NOT a live signal.
+    if phase >= 3:
+        try:
+            from signals.fear_dip import evaluate as fear_dip_eval
+            import paper.fear_dip_tracker as fdt
+            _raw = Path("data/raw/etf_ohlcv.parquet")
+            if _raw.exists():
+                _o = pd.read_parquet(_raw)
+                _c = _o["Close"] if isinstance(_o.columns, pd.MultiIndex) else _o
+                fd_sig = fear_dip_eval(_c)
+                fd_trades = fdt.update(_c, fd_sig, pd.Timestamp(today))
+                fd_metrics = fdt.metrics(fd_trades)
+                regime["fearDip"] = {
+                    "isEntry": fd_sig["is_entry"], "score": fd_sig["score"],
+                    "threshold": fd_sig["threshold"], "percentile": fd_sig["percentile"],
+                    "entry": fd_sig["entry_price"], "paper": fd_metrics,
+                }
+                log.info("Fear-dip(exp): entry=%s pct=%s%% paper(n=%d wr=%.0f%% tot=%.1f%% open=%d)",
+                         fd_sig["is_entry"],
+                         f"{(fd_sig['percentile'] or 0)*100:.0f}",
+                         fd_metrics["n"], fd_metrics["winrate"] * 100,
+                         fd_metrics["total"] * 100, fd_metrics["open"])
+        except Exception as exc:
+            log.warning("Fear-dip eval failed (non-fatal): %s", exc)
+
     # ── Report ────────────────────────────────────────────────────────────────
     report_path = build_report(signals, regime, today,
                                paper_metrics=paper_metrics,
