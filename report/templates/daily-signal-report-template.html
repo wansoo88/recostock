@@ -24,6 +24,7 @@
   .gates-panel .ttl .overall { font-size: 12px; }
   .gates-panel .overall.pass { color: var(--green); }
   .gates-panel .overall.fail { color: var(--red); }
+  .gates-panel .overall.wait { color: var(--amber); }
   .gate-row { display: grid; grid-template-columns: 130px 1fr 90px 30px; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid #14181f; font-size: 12px; }
   .gate-row:last-child { border-bottom: none; }
   .gate-name { font-weight: 600; color: var(--text); }
@@ -171,17 +172,32 @@
         ${badge}
       </div>`;
     }).join('');
-    const overallCls = allPass ? 'pass' : 'fail';
-    const overallTxt = allPass
-      ? `✓ ALL ${gates.length} GATES PASS — 시그널 발사 가능`
-      : `✗ ${gates.length - passCount} / ${gates.length} 게이트 미통과 — 시그널 차단`;
+    // Gates passing is necessary but NOT sufficient — a signal also needs a
+    // ticker clearing the per-name confidence gate (0.65). Reflect both layers
+    // so the banner can't imply a fire when no name qualifies.
+    const candList = REPORT.regime.candidates || [];
+    const anyName = candList.some(c => c.passed);
+    let overallCls, overallTxt;
+    if (!allPass) {
+      overallCls = 'fail';
+      overallTxt = `✗ 레짐 ${passCount}/${gates.length} 통과 — 시그널 차단 (1단 레짐)`;
+    } else if (anyName) {
+      overallCls = 'pass';
+      overallTxt = `✓ 레짐 ${gates.length}/${gates.length} 통과 + 종목 확신도 충족 — 시그널 발사`;
+    } else {
+      overallCls = 'wait';
+      overallTxt = `⏳ 레짐 ${gates.length}/${gates.length} 통과 — 단, 종목 확신도 0.65 미달로 시그널 0개`;
+    }
     document.getElementById('gates-panel').innerHTML = `
       <div class="gates-panel">
         <div class="ttl">
-          <span>Regime Gates (conviction_v4)</span>
+          <span>Regime Gates (conviction_v4) · 1단 필터</span>
           <span class="overall ${overallCls}">${overallTxt}</span>
         </div>
         ${rows}
+        <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5;border-top:1px solid #14181f;padding-top:8px">
+          레짐 게이트는 <strong>1단(시장 환경)</strong>입니다. 실제 발사는 <strong>2단(종목별 모델 확신도 ≥ 0.65)</strong>까지 통과해야 합니다. 아래 워치리스트에서 종목별 확신도를 확인하세요.
+        </div>
       </div>`;
   }
 
