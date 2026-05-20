@@ -76,12 +76,22 @@ async def send_daily_signal(
         )
         lines.append(f"📋 롱 후보 TOP5: {wl}")
 
-    # Fear-dip experimental signal (paper-only) — only surface on an entry day.
+    # Fear-dip experimental signal (paper-only). Surface the entry on a signal
+    # day AND the accumulating paper track so the user sees it build over time.
     fd = regime.get("fearDip")
-    if fd and fd.get("isEntry"):
-        pct = fd.get("percentile")
-        pct_s = f"{pct*100:.0f}%" if pct is not None else "—"
-        lines.append(f"🧪 [실험·페이퍼] 공포매수 진입신호 — SPY (공포 백분위 {pct_s}, 10일 보유). 실전 아님")
+    if fd:
+        if fd.get("isEntry"):
+            pct = fd.get("percentile")
+            pct_s = f"{pct*100:.0f}%" if pct is not None else "—"
+            lines.append(f"🧪 [실험·페이퍼] 공포매수 진입신호 — SPY (공포 백분위 {pct_s}, 10일 보유). 실전 아님")
+        pm = fd.get("paper") or {}
+        n_closed, n_open = pm.get("n", 0), pm.get("open", 0)
+        if n_closed > 0 or n_open > 0:
+            track = (f"🧪 공포매수 페이퍼 트랙: 청산 {n_closed}건 · 승률 {pm.get('winrate',0)*100:.0f}% "
+                     f"· 누적 {pm.get('total',0)*100:+.1f}% · 보유 {n_open}건")
+            if n_closed >= 5:
+                track += "  ← 표본 누적, 검토 시점"
+            lines.append(track)
 
     if report_url:
         lines.append(f"상세(적중률·근거·팩터): {report_url}")
