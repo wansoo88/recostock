@@ -1,9 +1,9 @@
 """Sentiment data pipeline (Phase A).
 
 Collects daily ticker mention counts from free public sources, stored as
-long-format parquet at data/raw/sentiment_daily.parquet:
+long-format parquet at data/sentiment/sentiment_daily.parquet:
 
-    columns = [date (date), ticker (str), source (str), mention_count (int)]
+    columns = [date, ticker, source, mention_count, polarity_mean, polarity_n]
 
 Sources currently wired:
   - Yahoo Finance per-ticker headline RSS  (sources.yahoo_rss)
