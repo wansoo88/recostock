@@ -39,7 +39,28 @@ def fetch_etf_ohlcv(tickers: list[str], years: int = config.HISTORY_YEARS) -> pd
     # Guard: drop any bar dated today or later (auto_adjust look-ahead risk)
     today_ts = pd.Timestamp(end)
     df = df[df.index < today_ts]
-    log.info("Fetched %d bars for %d tickers", len(df), len(tickers))
+
+    # Guard: yfinance silently returns partial data when some tickers fail
+    # (network/delisting). A missing or all-NaN ticker would otherwise become a
+    # silent NaN column and a wrong/absent signal. Detect and warn loudly.
+    if isinstance(df.columns, pd.MultiIndex) and "Close" in df.columns.get_level_values(0):
+        close = df["Close"]
+        present = {t for t in tickers if t in close.columns and close[t].notna().any()}
+    else:  # single-ticker fallback (no MultiIndex)
+        present = set(tickers) if not df.empty and df.notna().any().any() else set()
+    missing = [t for t in tickers if t not in present]
+    if missing:
+        log.warning("yfinance returned NO valid data for %d/%d tickers: %s — "
+                    "these will be absent from signals this run",
+                    len(missing), len(tickers), missing)
+    if "SPY" in missing:
+        log.error("CRITICAL: SPY missing — regime trend gate and fear-dip "
+                  "depend on it; signals will degrade this run")
+    if not present:
+        raise RuntimeError("yfinance returned no valid data for ANY ticker — "
+                           "aborting (likely a network/API outage)")
+
+    log.info("Fetched %d bars for %d/%d tickers", len(df), len(present), len(tickers))
     return df
 
 
@@ -48,6 +69,10 @@ def fetch_vix(years: int = config.HISTORY_YEARS) -> pd.Series:
     start = end - timedelta(days=years * 365)
     raw = yf.download(config.VIX_TICKER, start=str(start), end=str(end),
                       auto_adjust=True, progress=False)
+    if raw.empty or "Close" not in raw.columns:
+        log.error("VIX download empty/malformed — regime detection will fall back "
+                  "to defaults this run")
+        return pd.Series(dtype="float64", name="VIX")
     series = raw["Close"].squeeze()
     series.name = "VIX"
     return series[series.index < pd.Timestamp(end)]

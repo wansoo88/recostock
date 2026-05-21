@@ -137,13 +137,24 @@ def build_feature_matrix_v3(close_df: pd.DataFrame, vix_df: pd.DataFrame | None 
         parts.append(sub)
     features = pd.concat(parts).sort_index()
 
-    if vix_df is not None:
-        vix = vix_df.iloc[:, 0].clip(lower=1)
+    if vix_df is not None and not vix_df.empty:
+        # ffill (causal) so an isolated missing VIX day doesn't silently drop
+        # every ticker's row for that date via the final dropna().
+        vix = vix_df.iloc[:, 0].clip(lower=1).ffill()
         date_idx = features.index.get_level_values("date")
         features["vix_log"] = date_idx.map(np.log(vix).to_dict())
         features["vix_chg_1d"] = date_idx.map(vix.pct_change().to_dict())
-
-    return features.dropna()
+        n_before = len(features)
+        features = features.dropna()
+        dropped = n_before - len(features)
+        if dropped > 0.05 * n_before:
+            log.warning("inference: dropped %d/%d feature rows on NaN (>5%%) — "
+                        "possible VIX/macro data gap", dropped, n_before)
+        return features
+    else:
+        log.warning("inference: VIX data missing/empty — vix_log/vix_chg_1d "
+                    "features unavailable, model may degrade")
+        return features.dropna()
 
 
 def load_proba_history() -> pd.DataFrame:

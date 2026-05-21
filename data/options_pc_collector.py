@@ -79,8 +79,16 @@ def compute_spy_pc(n_expirations: int = DEFAULT_N_EXPIRATIONS) -> dict | None:
             total_put_oi += float(chain.puts["openInterest"].fillna(0).sum())
             n_sampled += 1
 
+        n_requested = len(expirations)
         if n_sampled == 0:
             log.warning("P/C: no expirations sampled successfully")
+            return None
+        if n_sampled < n_requested / 2:
+            # Ratios from <50% of expirations are biased toward whichever
+            # maturities happened to load — better no datapoint than a skewed
+            # one polluting the (monitoring-only) history.
+            log.warning("P/C: only %d/%d expirations loaded (<50%%) — skipping "
+                        "today's datapoint to avoid biased ratio", n_sampled, n_requested)
             return None
         if total_call_volume <= 0 or total_call_oi <= 0:
             log.warning("P/C: zero call volume/OI — skip")
