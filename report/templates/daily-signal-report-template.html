@@ -133,10 +133,17 @@
     typeof REPORT.regime.exposure === 'number' ? REPORT.regime.exposure.toFixed(2) + '×' : '—';
   document.getElementById('rpt-count').textContent = REPORT.signals.length;
 
-  // Strategy version banner (conviction_v4 holdout WR 73.68%)
+  // Strategy version banner — disclose sample size + cadence (honesty: the
+  // 73.7% holdout figure is weekly-K=1, n=19; full OOS is 61%, n=31).
   const strat = REPORT.regime.strategy || REPORT.strategy || {};
   if (strat.version) {
-    const wrTxt = strat.holdout_wr ? `Holdout WR ${(strat.holdout_wr*100).toFixed(1)}%` : '';
+    let wrTxt = '';
+    if (strat.holdout_wr) {
+      const hn = strat.holdout_n ? ` n=${strat.holdout_n}` : '';
+      wrTxt = `Holdout WR ${(strat.holdout_wr*100).toFixed(1)}%${hn}`;
+      if (strat.full_wr) wrTxt += ` · Full ${(strat.full_wr*100).toFixed(0)}% n=${strat.full_n || '?'}`;
+      wrTxt += ' (주간 K=1)';
+    }
     document.getElementById('strategy-bar').innerHTML = `
       <div class="strategy-bar">
         <div><span class="ver">${strat.version}</span><span class="desc">${strat.description || ''}</span></div>
@@ -209,11 +216,13 @@
     const near = thrC - 0.05;
     const confCls = c => c.passed ? 'conf-pass' : (c.confidence >= near ? 'conf-near' : 'conf-low');
     const light = c => c.passed ? '🟢' : (c.confidence >= near ? '🟡' : '🔴');
+    const tierCls = t => t === '고확신' ? 'conf-pass' : (t === '표준' ? 'conf-near' : 'conf-low');
     const rows = cands.map(c => `
       <tr>
         <td>${light(c)} <strong>${c.ticker}</strong></td>
         <td style="color:var(--muted)">${c.name}</td>
         <td class="conf-cell ${confCls(c)}">${c.confidence.toFixed(3)}</td>
+        <td class="${tierCls(c.tier)}">${c.tier || ''}</td>
         <td>$${c.entry.toFixed(2)}</td>
         <td style="color:var(--green)">$${c.tp.toFixed(2)}</td>
         <td style="color:var(--red)">$${c.sl.toFixed(2)}</td>
@@ -221,16 +230,16 @@
       </tr>`).join('');
     document.getElementById('candidates-panel').innerHTML = `
       <div class="cand-panel">
-        <div class="ttl">롱 후보 워치리스트 — 모델확신도순 (기준 ${thrC.toFixed(2)} · 🟢통과 🟡근접 🔴미달)</div>
+        <div class="ttl">롱 후보 워치리스트 — 모델확신도순 (기준 ${thrC.toFixed(2)} · 🟢통과 🟡근접 🔴미달 · 티어 0.70↑ 고확신)</div>
         <table class="cand-table">
           <thead><tr>
-            <th>종목</th><th>이름</th><th>확신도</th><th>진입</th><th>목표(TP+3%)</th><th>손절(SL-1%)</th><th>기대수익*</th>
+            <th>종목</th><th>이름</th><th>확신도</th><th>티어</th><th>진입</th><th>목표(TP+3%)</th><th>손절(SL-1%)</th><th>기대수익*</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
         <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
           *기대수익 = 확신도×(+3%)−(1−확신도)×(−1%)−비용 0.25%. 모델 기반 추정이며 백테스트 검증값 아님.<br>
-          검증된 성과(Holdout WR 73.68%·손익비 1.25)는 🟢 통과 종목 진입에만 적용. 숏(인버스)은 백테스트 결과 알파 없어 미포함.
+          검증된 성과는 주간 K=1(매주 최고 1종목) 주기 기준 Holdout WR 73.7%(n=19, 소표본)·Full 61%(n=31). 🟢 통과 종목에만 적용. 숏(인버스)은 백테스트 결과 알파 없어 미포함.
         </div>
       </div>`;
 
@@ -241,9 +250,9 @@
     document.getElementById('toppick-panel').innerHTML = `
       <div class="toppick ${isWaiting ? 'waiting' : ''}">
         <div class="tp-tag">${isWaiting ? '⏳ 오늘의 TOP PICK — 대기 (진입 조건 미충족)' : '🎯 오늘의 TOP PICK — 진입 가능'}</div>
-        <div class="tp-tk">${pick.ticker} · ${pick.name}</div>
+        <div class="tp-tk">${pick.ticker} · ${pick.name} <span class="${pick.tier === '고확신' ? 'conf-pass' : 'conf-near'}" style="font-size:13px">[${pick.tier || ''}]</span></div>
         <div class="tp-reason">
-          모델확신도 <strong>${pick.confidence.toFixed(3)}</strong> (기준 ${thrC.toFixed(2)})
+          모델확신도 <strong>${pick.confidence.toFixed(3)}</strong> (기준 ${thrC.toFixed(2)}, 티어 ${pick.tier || '—'})
           · 진입 $${pick.entry.toFixed(2)} · 목표 $${pick.tp.toFixed(2)} · 손절 $${pick.sl.toFixed(2)}<br>
           ${isWaiting
             ? `오늘은 9개 롱 후보 중 0.65를 넘긴 종목이 없어 <strong>진입하지 않습니다.</strong> 위 종목이 확신도 1위로 가장 근접 — 0.65 돌파 시 첫 후보입니다.`

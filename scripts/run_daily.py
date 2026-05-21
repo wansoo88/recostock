@@ -309,10 +309,16 @@ async def main() -> None:
                          "op": "<", "passed": move_z is not None and not pd.isna(move_z) and move_z < config.CONVICTION_MOVE_Z_MAX,
                          "format": "+.2f", "desc": "60일 채권변동성 (≥1.0 = bond stress)"},
                     ]
+                    # WR is the weekly-K=1 cadence (one best name/week). Disclose
+                    # sample size: the 73.7% holdout figure is n=19 — small. Full
+                    # OOS is 61% (n=31). Threshold stays 0.65: a 2026-05-20 sweep
+                    # showed raising it to 0.75 starves the strategy (n=2-5) and
+                    # lowers total return, since K=1 already selects for quality.
                     regime["strategy"] = {
                         "version": "conviction_v4",
-                        "description": "K=1 + Multi-EMA(3,5,7) + 5-gate regime + 고정 SL 1.0%/TP 3.0%",
-                        "holdout_wr": 0.7368,
+                        "description": "주간 K=1 + Multi-EMA(3,5,7) + 5-gate regime + 고정 TP3%/SL1%",
+                        "holdout_wr": 0.7368, "holdout_n": 19,
+                        "full_wr": 0.613, "full_n": 31,
                     }
 
                     # Long-only candidate watchlist — rank the full core+sector
@@ -341,6 +347,11 @@ async def main() -> None:
                         est_ev = (float(e5) * config.CONVICTION_TP_PCT
                                   - (1 - float(e5)) * config.CONVICTION_SL_PCT
                                   - config.TOTAL_COST_ROUNDTRIP)
+                        # Confidence tier from the validated monotonic relationship
+                        # (higher proba -> higher realized WR/EV, n=469 OOS sample).
+                        tier = ("고확신" if float(e5) >= 0.70
+                                else "표준" if float(e5) >= thr_c
+                                else "기준미달")
                         candidates.append({
                             "ticker": tk, "name": m.name,
                             "confidence": round(float(e5), 4),
@@ -349,6 +360,7 @@ async def main() -> None:
                             "sl": round(px * (1 - config.CONVICTION_SL_PCT), 2),
                             "estEv": round(est_ev, 5),
                             "passed": bool(passed),
+                            "tier": tier,
                         })
                     candidates.sort(key=lambda c: c["confidence"], reverse=True)
                     regime["candidates"] = candidates
