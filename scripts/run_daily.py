@@ -488,8 +488,19 @@ async def main() -> None:
                          f"{(fd_sig['percentile'] or 0)*100:.0f}",
                          fd_metrics["n"], fd_metrics["winrate"] * 100,
                          fd_metrics["total"] * 100, fd_metrics["open"])
+
+                # Trend-following core + fear-dip leverage tilt — PRIMARY engine.
+                # fear-dip is "active" while a paper position is open (its 10-day
+                # window), which is the panic-bounce tilt trigger.
+                from signals.trend_core import evaluate as trend_eval
+                fd_active = bool(fd_metrics.get("open", 0) > 0 or fd_sig["is_entry"])
+                regime["trendCore"] = trend_eval(_c, fd_active)
+                tc = regime["trendCore"]
+                log.info("Trend-core: regime=%s exposure=%.2fx (SPY %.0f%% / SPXL %.0f%%)",
+                         tc.get("regime"), tc.get("effExposure", 0),
+                         tc.get("spyWeight", 0) * 100, tc.get("spxlWeight", 0) * 100)
         except Exception as exc:
-            log.warning("Fear-dip eval failed (non-fatal): %s", exc)
+            log.warning("Fear-dip/trend-core eval failed (non-fatal): %s", exc)
 
     # ── All-weather ensemble verdict (added 2026-05-22) ───────────────────────
     # conviction (trend, calm uptrend regime) and fear-dip (mean-reversion,

@@ -92,6 +92,7 @@
 <h1>📊 ETF 시그널 리포트</h1>
 <div class="date" id="rpt-date"></div>
 
+<div id="trendcore-panel"></div>
 <div id="ensemble-panel"></div>
 <div id="strategy-bar"></div>
 
@@ -134,8 +135,31 @@
     typeof REPORT.regime.exposure === 'number' ? REPORT.regime.exposure.toFixed(2) + '×' : '—';
   document.getElementById('rpt-count').textContent = REPORT.signals.length;
 
-  // All-weather ensemble verdict — one daily action from conviction (trend)
-  // OR fear-dip (mean-reversion); they fire in opposite regimes (0 overlap).
+  // Trend-following core + fear-dip tilt — PRIMARY position engine.
+  const tc = REPORT.regime.trendCore;
+  if (tc && tc.coreOn != null) {
+    const regimeCls = tc.regime === 'cash' ? 'fail' : (tc.regime.includes('panic') ? 'wait' : 'pass');
+    const expBadge = `노출 ${tc.effExposure}x`;
+    let alloc;
+    if (tc.regime === 'cash') alloc = '현금 100%';
+    else if (tc.spxlWeight > 0) alloc = `SPY ${(tc.spyWeight*100).toFixed(0)}% + SPXL ${(tc.spxlWeight*100).toFixed(0)}% (3x)`;
+    else alloc = 'SPY 100%';
+    document.getElementById('trendcore-panel').innerHTML = `
+      <div class="gates-panel" style="border-left:4px solid var(--green)">
+        <div class="ttl"><span>오늘의 포지션 — 추세코어 + 공포 틸트 (주력)</span>
+          <span class="overall ${regimeCls}">${expBadge}</span></div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:4px">${alloc}</div>
+        <div style="font-size:13px;color:var(--text)">${tc.note}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:6px">
+          SPY $${tc.price} vs 200일선 $${tc.sma200} (${tc.distPct>=0?'+':''}${tc.distPct}%)
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;border-top:1px solid #14181f;padding-top:8px">
+          백테스트(실제 SPXL, decay반영): 코어 +78.6%/Sharpe 0.99 → 1.3x 틸트 +92.2%/0.99 (Full OOS), 2024+ +48.7%/1.39, MDD −22%/−10.5%. 단순 저격 신호(+19%/+10%)를 대체하는 주력 엔진.
+        </div>
+      </div>`;
+  }
+
+  // All-weather ensemble verdict (tactical satellite) — conviction OR fear-dip.
   const ens = REPORT.regime.ensemble;
   if (ens) {
     const bt = ens.backtest || {};
