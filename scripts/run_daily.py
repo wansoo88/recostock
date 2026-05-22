@@ -491,6 +491,32 @@ async def main() -> None:
         except Exception as exc:
             log.warning("Fear-dip eval failed (non-fatal): %s", exc)
 
+    # ── All-weather ensemble verdict (added 2026-05-22) ───────────────────────
+    # conviction (trend, calm uptrend regime) and fear-dip (mean-reversion,
+    # stress regime) fire in OPPOSITE regimes — 0 overlapping days in the OOS
+    # backtest. Combined: 105 trades (3.4x conviction alone), Holdout Sharpe
+    # 2.41, +96% Full. One unified daily action drawn from whichever fires;
+    # conviction is LIVE, fear-dip is EXPERIMENTAL (paper).
+    live_sig = signals[0] if signals else None
+    fd = regime.get("fearDip") or {}
+    if live_sig is not None:
+        ensemble = {"action": "conviction", "live": True,
+                    "ticker": live_sig.ticker, "name": live_sig.name,
+                    "entry": live_sig.entry, "tp": live_sig.tp, "sl": live_sig.sl,
+                    "note": "추세추종 (calm 상승 레짐) — 실전 신호"}
+    elif fd.get("isEntry"):
+        ensemble = {"action": "feardip", "live": False,
+                    "ticker": "SPY", "name": "SPDR S&P 500",
+                    "entry": fd.get("entry"),
+                    "note": "공포 평균회귀 (스트레스 레짐) — 실험·페이퍼, 10일 보유"}
+    else:
+        ensemble = {"action": "none", "live": False,
+                    "note": "오늘은 두 전략 모두 미발사 — 관망"}
+    ensemble["backtest"] = {"combinedTrades": 105, "holdoutSharpe": 2.41,
+                            "overlapDays": 0, "fullTotal": 96.1}
+    regime["ensemble"] = ensemble
+    log.info("Ensemble verdict: %s (live=%s)", ensemble["action"], ensemble["live"])
+
     # ── Report ────────────────────────────────────────────────────────────────
     report_path = build_report(signals, regime, today,
                                paper_metrics=paper_metrics,

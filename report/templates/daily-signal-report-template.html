@@ -92,6 +92,7 @@
 <h1>📊 ETF 시그널 리포트</h1>
 <div class="date" id="rpt-date"></div>
 
+<div id="ensemble-panel"></div>
 <div id="strategy-bar"></div>
 
 <div class="regime-strip">
@@ -132,6 +133,33 @@
   document.getElementById('rpt-exposure').textContent =
     typeof REPORT.regime.exposure === 'number' ? REPORT.regime.exposure.toFixed(2) + '×' : '—';
   document.getElementById('rpt-count').textContent = REPORT.signals.length;
+
+  // All-weather ensemble verdict — one daily action from conviction (trend)
+  // OR fear-dip (mean-reversion); they fire in opposite regimes (0 overlap).
+  const ens = REPORT.regime.ensemble;
+  if (ens) {
+    const bt = ens.backtest || {};
+    let head, cls, body;
+    if (ens.action === 'conviction') {
+      head = '🟢 오늘의 액션 — 실전 매수'; cls = 'pass';
+      body = `<strong>${ens.ticker}</strong> · ${ens.name} — 진입 $${(ens.entry||0).toFixed(2)} / TP $${(ens.tp||0).toFixed(2)} / SL $${(ens.sl||0).toFixed(2)}<br><span style="color:var(--muted)">${ens.note}</span>`;
+    } else if (ens.action === 'feardip') {
+      head = '🔵 오늘의 액션 — 실험(페이퍼)'; cls = 'wait';
+      body = `<strong>${ens.ticker}</strong> 공포매수 — 진입 $${(ens.entry||0).toFixed(2)}<br><span style="color:var(--muted)">${ens.note}</span>`;
+    } else {
+      head = '⏳ 오늘의 액션 — 관망'; cls = 'wait';
+      body = `<span style="color:var(--muted)">${ens.note}</span>`;
+    }
+    document.getElementById('ensemble-panel').innerHTML = `
+      <div class="gates-panel" style="border-left:4px solid var(--blue)">
+        <div class="ttl"><span>올웨더 앙상블 (추세 + 공포 평균회귀)</span>
+          <span class="overall ${cls}">${head}</span></div>
+        <div style="font-size:14px;line-height:1.6">${body}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;border-top:1px solid #14181f;padding-top:8px">
+          두 전략은 정반대 레짐에서 발사 — OOS 백테스트 겹침 ${bt.overlapDays ?? 0}일, 결합 ${bt.combinedTrades ?? '?'}거래, Holdout Sharpe ${bt.holdoutSharpe ?? '?'}, Full +${bt.fullTotal ?? '?'}%. conviction=실전, 공포매수=실험(페이퍼).
+        </div>
+      </div>`;
+  }
 
   // Strategy version banner — disclose sample size + cadence (honesty: the
   // 73.7% holdout figure is weekly-K=1, n=19; full OOS is 61%, n=31).
