@@ -50,6 +50,7 @@ from signals.generator import (
     compute_winrate_ci,
 )
 from signals.conviction import select_conviction_signals
+from signals.calibration import calibrated_winrate as _calibrated_winrate
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger(__name__)
@@ -344,8 +345,11 @@ async def main() -> None:
                             continue
                         passed = (float(e5) >= thr_c and e3 is not None and e7 is not None
                                   and float(e3) >= thr_c and float(e7) >= thr_c)
-                        est_ev = (float(e5) * config.CONVICTION_TP_PCT
-                                  - (1 - float(e5)) * config.CONVICTION_SL_PCT
+                        # EV uses the CALIBRATED win prob (raw proba overstates
+                        # odds ~0.74 vs ~0.57 actual), not the raw confidence.
+                        cal_w = _calibrated_winrate(float(e5)) or float(e5)
+                        est_ev = (cal_w * config.CONVICTION_TP_PCT
+                                  - (1 - cal_w) * config.CONVICTION_SL_PCT
                                   - config.TOTAL_COST_ROUNDTRIP)
                         # Confidence tier from the validated monotonic relationship
                         # (higher proba -> higher realized WR/EV, n=469 OOS sample).
@@ -355,6 +359,7 @@ async def main() -> None:
                         candidates.append({
                             "ticker": tk, "name": m.name,
                             "confidence": round(float(e5), 4),
+                            "calWin": _calibrated_winrate(float(e5)),
                             "entry": round(px, 2),
                             "tp": round(px * (1 + config.CONVICTION_TP_PCT), 2),
                             "sl": round(px * (1 - config.CONVICTION_SL_PCT), 2),
