@@ -514,8 +514,23 @@ async def main() -> None:
                     "note": "오늘은 두 전략 모두 미발사 — 관망"}
     ensemble["backtest"] = {"combinedTrades": 105, "holdoutSharpe": 2.41,
                             "overlapDays": 0, "fullTotal": 96.1}
+    # Volatility-targeted position size for the actionable ticker.
+    if ensemble["action"] != "none":
+        try:
+            from signals.sizing import position_size_pct
+            _rawp = Path("data/raw/etf_ohlcv.parquet")
+            if _rawp.exists():
+                _od = pd.read_parquet(_rawp)
+                _cd = _od["Close"] if isinstance(_od.columns, pd.MultiIndex) else _od
+                tk = ensemble["ticker"]
+                if tk in _cd.columns:
+                    ensemble["sizing"] = position_size_pct(_cd[tk].dropna())
+        except Exception as exc:
+            log.warning("Sizing failed (non-fatal): %s", exc)
     regime["ensemble"] = ensemble
-    log.info("Ensemble verdict: %s (live=%s)", ensemble["action"], ensemble["live"])
+    _sz = (ensemble.get("sizing") or {}).get("sizePct")
+    log.info("Ensemble verdict: %s (live=%s) size=%s", ensemble["action"],
+             ensemble["live"], f"{_sz*100:.0f}%" if _sz else "n/a")
 
     # ── Report ────────────────────────────────────────────────────────────────
     report_path = build_report(signals, regime, today,

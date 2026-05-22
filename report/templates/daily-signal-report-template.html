@@ -140,12 +140,16 @@
   if (ens) {
     const bt = ens.backtest || {};
     let head, cls, body;
+    const sz = ens.sizing || {};
+    const szTxt = sz.sizePct != null
+      ? ` · 권장사이즈 <strong>${(sz.sizePct*100).toFixed(0)}%</strong> <span style="color:var(--muted)">(시스템 자본 대비, 연변동성 ${(sz.annVol*100).toFixed(0)}% 기준)</span>`
+      : '';
     if (ens.action === 'conviction') {
       head = '🟢 오늘의 액션 — 실전 매수'; cls = 'pass';
-      body = `<strong>${ens.ticker}</strong> · ${ens.name} — 진입 $${(ens.entry||0).toFixed(2)} / TP $${(ens.tp||0).toFixed(2)} / SL $${(ens.sl||0).toFixed(2)}<br><span style="color:var(--muted)">${ens.note}</span>`;
+      body = `<strong>${ens.ticker}</strong> · ${ens.name} — 진입 $${(ens.entry||0).toFixed(2)} / TP $${(ens.tp||0).toFixed(2)} / SL $${(ens.sl||0).toFixed(2)}${szTxt}<br><span style="color:var(--muted)">${ens.note}</span>`;
     } else if (ens.action === 'feardip') {
       head = '🔵 오늘의 액션 — 실험(페이퍼)'; cls = 'wait';
-      body = `<strong>${ens.ticker}</strong> 공포매수 — 진입 $${(ens.entry||0).toFixed(2)}<br><span style="color:var(--muted)">${ens.note}</span>`;
+      body = `<strong>${ens.ticker}</strong> 공포매수 — 진입 $${(ens.entry||0).toFixed(2)}${szTxt}<br><span style="color:var(--muted)">${ens.note}</span>`;
     } else {
       head = '⏳ 오늘의 액션 — 관망'; cls = 'wait';
       body = `<span style="color:var(--muted)">${ens.note}</span>`;

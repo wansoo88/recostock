@@ -96,11 +96,13 @@ async def send_daily_signal(
     # All-weather ensemble verdict — one unified daily action line.
     ens = regime.get("ensemble")
     if ens:
+        _sz = (ens.get("sizing") or {}).get("sizePct")
+        _szt = f" · 사이즈 {_sz*100:.0f}%" if _sz else ""
         if ens.get("action") == "conviction":
             lines.append(f"🧭 오늘의 액션(실전): {ens['ticker']} 매수 — 진입 ${ens.get('entry',0):.2f} "
-                         f"/ TP ${ens.get('tp',0):.2f} / SL ${ens.get('sl',0):.2f}")
+                         f"/ TP ${ens.get('tp',0):.2f} / SL ${ens.get('sl',0):.2f}{_szt}")
         elif ens.get("action") == "feardip":
-            lines.append(f"🧭 오늘의 액션(실험·페이퍼): SPY 공포매수 — 진입 ${ens.get('entry',0):.2f}, 10일 보유")
+            lines.append(f"🧭 오늘의 액션(실험·페이퍼): SPY 공포매수 — 진입 ${ens.get('entry',0):.2f}, 10일 보유{_szt}")
         else:
             lines.append("🧭 오늘의 액션: 관망 (두 전략 모두 미발사)")
 
