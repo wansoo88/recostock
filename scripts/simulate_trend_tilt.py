@@ -23,6 +23,15 @@ from scripts.simulate_trading import feardip_trades, close
 
 ONEWAY = config.TOTAL_COST_ROUNDTRIP / 2
 START = 10_000.0
+# Cash sleeve: ^IRX (13-week T-bill, annualized %) — what BIL/SGOV/short-bond
+# parking actually earns. Previously the sim assumed 0% on cash, badly
+# understating the strategy (264/1352 days in cash, full OOS).
+_IRX = pd.read_parquet("data/raw/macro/yield_2y.parquet").iloc[:, 0].dropna()
+
+
+def _cash_daily_yield(d):
+    v = _IRX.asof(d)
+    return (v / 100.0 / 252.0) if pd.notna(v) else 0.0
 
 
 def fd_mask(idx):
@@ -67,8 +76,12 @@ def simulate(w_spxl: float, since: pd.Timestamp, label: str, log_events: bool = 
         spy_w, spxl_w, _ = target_exposure(c_on, f_on, w_spxl)
         # turnover cost on change
         turn = abs(spy_w - prev_spy) + abs(spxl_w - prev_spxl)
-        # daily P&L on yesterday's positions, then rebalance
-        daily = prev_spy * (sret.get(d, 0) or 0) + prev_spxl * (xret.get(d, 0) or 0) - turn * ONEWAY
+        # daily P&L: SPY + SPXL legs + cash sleeve (1 - SPY - SPXL) earning IRX
+        cash_w = max(0.0, 1.0 - prev_spy - prev_spxl)
+        daily = (prev_spy * (sret.get(d, 0) or 0)
+                 + prev_spxl * (xret.get(d, 0) or 0)
+                 + cash_w * _cash_daily_yield(d)
+                 - turn * ONEWAY)
         cap *= (1 + daily); daily_rets.append(daily)
         peak = max(peak, cap); mdd = min(mdd, cap / peak - 1)
 

@@ -65,7 +65,7 @@ def evaluate(close_df: pd.DataFrame, fear_dip_active: bool) -> dict:
         regime, note = "downtrend_panic", "하락추세 + 공포 — SPY 100% (저점 재진입, 무레버리지)"
     else:
         spy_w, spxl_w = 0.0, 0.0
-        regime, note = "cash", "하락추세 — 현금 (200일선 회복까지 관망)"
+        regime, note = "cash", "하락추세 — 현금 (200일선 회복 대기, BIL/SGOV 등 단기채 파킹 권장 ~연 4-5%)"
 
     return {
         "coreOn": core_on,
