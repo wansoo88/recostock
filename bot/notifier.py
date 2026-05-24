@@ -96,14 +96,13 @@ async def send_daily_signal(
     # Trend-core position (primary engine) — lead the actionable section.
     tc = regime.get("trendCore")
     if tc and tc.get("coreOn") is not None:
-        if tc.get("regime") == "cash":
-            lines.append("📐 오늘의 포지션(주력): 현금 100% — SPY 200일선 아래, 추세 꺼짐")
-        elif tc.get("spxlWeight", 0) > 0:
-            lines.append(f"📐 오늘의 포지션(주력): SPY {tc['spyWeight']*100:.0f}% + SPXL {tc['spxlWeight']*100:.0f}% "
-                         f"(≈{tc['effExposure']}x) — 상승추세+공포 틸트")
-        else:
-            lines.append(f"📐 오늘의 포지션(주력): SPY 100% — 상승추세 보유 "
-                         f"(SPY ${tc.get('price',0):.2f} / 200일선 ${tc.get('sma200',0):.2f})")
+        parts = []
+        if tc.get("spyWeight", 0) > 0:  parts.append(f"SPY {tc['spyWeight']*100:.0f}%")
+        if tc.get("spxlWeight", 0) > 0: parts.append(f"SPXL {tc['spxlWeight']*100:.0f}%")
+        if tc.get("qqqWeight", 0) > 0:  parts.append(f"QQQ {tc['qqqWeight']*100:.0f}%")
+        if tc.get("cashWeight", 0) > 0: parts.append(f"현금/BIL {tc['cashWeight']*100:.0f}%")
+        alloc = " + ".join(parts) if parts else "현금 100%"
+        lines.append(f"📐 오늘의 포지션(주력): {alloc} (≈{tc.get('effExposure',0):.2f}x) — {tc.get('note','')}")
 
     # All-weather ensemble verdict — one unified daily action line.
     ens = regime.get("ensemble")

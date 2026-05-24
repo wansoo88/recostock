@@ -140,10 +140,12 @@
   if (tc && tc.coreOn != null) {
     const regimeCls = tc.regime === 'cash' ? 'fail' : (tc.regime.includes('panic') ? 'wait' : 'pass');
     const expBadge = `노출 ${tc.effExposure}x`;
-    let alloc;
-    if (tc.regime === 'cash') alloc = '현금 100%';
-    else if (tc.spxlWeight > 0) alloc = `SPY ${(tc.spyWeight*100).toFixed(0)}% + SPXL ${(tc.spxlWeight*100).toFixed(0)}% (3x)`;
-    else alloc = 'SPY 100%';
+    const parts = [];
+    if (tc.spyWeight > 0)   parts.push(`SPY ${(tc.spyWeight*100).toFixed(0)}%`);
+    if (tc.spxlWeight > 0)  parts.push(`SPXL ${(tc.spxlWeight*100).toFixed(0)}% (3x)`);
+    if (tc.qqqWeight > 0)   parts.push(`QQQ ${(tc.qqqWeight*100).toFixed(0)}%`);
+    if (tc.cashWeight > 0)  parts.push(`현금/BIL ${(tc.cashWeight*100).toFixed(0)}%`);
+    let alloc = parts.length ? parts.join(' + ') : '현금 100%';
     document.getElementById('trendcore-panel').innerHTML = `
       <div class="gates-panel" style="border-left:4px solid var(--green)">
         <div class="ttl"><span>오늘의 포지션 — 추세코어 + 공포 틸트 (주력)</span>
@@ -151,10 +153,10 @@
         <div style="font-size:15px;font-weight:600;margin-bottom:4px">${alloc}</div>
         <div style="font-size:13px;color:var(--text)">${tc.note}</div>
         <div style="font-size:12px;color:var(--muted);margin-top:6px">
-          SPY $${tc.price} vs 200일선 $${tc.sma200} (${tc.distPct>=0?'+':''}${tc.distPct}%)
+          SPY $${tc.price} vs 200일선 $${tc.sma200} (${tc.distPct>=0?'+':''}${tc.distPct}%) · 추세필터: ${tc.trendFilter || '—'}
         </div>
         <div style="font-size:11px;color:var(--muted);margin-top:8px;border-top:1px solid #14181f;padding-top:8px">
-          백테스트(실제 SPXL, decay반영): 코어 +78.6%/Sharpe 0.99 → 1.3x 틸트 +92.2%/0.99 (Full OOS), 2024+ +48.7%/1.39, MDD −22%/−10.5%. 단순 저격 신호(+19%/+10%)를 대체하는 주력 엔진.
+          백테스트(SPY+QQQ 50/50, 실제 SPXL decay, VIX≥22 골든크로스 전환, IRX 현금수익): Full OOS +101.6%/Sharpe 1.02/MDD −24%, 2024+ +54.7%/1.37/−11%. 단일 SPY+200SMA(+79%) 대비 +22%p 향상.
         </div>
       </div>`;
   }
