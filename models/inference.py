@@ -1,7 +1,9 @@
-"""Phase 3: LightGBM daily inference for production pipeline.
+"""Phase 3: LightGBM daily inference (v1) — DEPRECATED.
 
-Loads walk-forward trained model, builds today's features, and returns
-per-ticker probabilities and rolling backtest statistics.
+Superseded 2026-05-17 by models/inference_v3.py (v3 = +macro features +
+top-K selection). No production code path imports from here as of
+2026-05-24. Kept temporarily for historical reference and any one-off
+research scripts that still pin v1; remove once those are migrated.
 """
 from __future__ import annotations
 

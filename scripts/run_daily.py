@@ -500,7 +500,7 @@ async def main() -> None:
                          tc.get("regime"), tc.get("effExposure", 0),
                          tc.get("spyWeight", 0) * 100, tc.get("spxlWeight", 0) * 100)
         except Exception as exc:
-            log.warning("Fear-dip/trend-core eval failed (non-fatal): %s", exc)
+            log.warning("Fear-dip/trend-core eval failed (non-fatal): %s", exc, exc_info=True)
 
     # ── All-weather ensemble verdict (added 2026-05-22) ───────────────────────
     # conviction (trend, calm uptrend regime) and fear-dip (mean-reversion,

@@ -88,12 +88,14 @@ DST 양쪽을 커버하기 위해 `20:30 UTC`와 `21:30 UTC` 두 개 cron 실행
 
 | Phase | 주요 작업 | 현재 |
 |-------|-----------|------|
-| 0 | 데이터 파이프라인 + 유니버스 확정 + look-ahead 검증 | **In progress** |
-| 1 | 단일 팩터 IC 검증, 무효 팩터 폐기 | — |
-| 2 | 베이스라인 규칙 모델 + 백테스트 (왕복 0.2% 반영) | — |
-| 3 | LightGBM → GRU + walk-forward | — |
-| 4 | Tier 1 게이트 → 페이퍼 트레이딩 (1x ETF) | — |
-| 5 | Tier 2 게이트 → 소액 실거래 + 레버리지 버킷 입증 | — |
+| 0 | 데이터 파이프라인 + 유니버스 확정 + look-ahead 검증 | ✅ 완료 |
+| 1 | 단일 팩터 IC 검증, 무효 팩터 폐기 | ✅ 완료 |
+| 2 | 베이스라인 규칙 모델 + 백테스트 | ✅ 완료 |
+| 3 | LightGBM 추론 (v3, +macro, top-K) + walk-forward | ✅ 운영 중 |
+| 4 | 페이퍼 트레이딩 (conviction Friday-K=1 + fear-dip) | ✅ 운영 중 |
+| 5 | 주력 엔진: trend-core(SPY+QQQ 50/50, vol-adaptive) + fear-dip SPXL 1.3x 틸트 | **운영 중 (2026-05-24~)** |
+
+**현재 운영 구성:** SPY/QQQ 50/50 추세코어(VIX<22면 200SMA, ≥22면 50&200 골든크로스) + fear-dip 활성 시 SPY 슬리브의 15%를 SPXL(3x)로 틸트. 현금 구간은 BIL/SGOV 단기채 파킹(IRX 수익률). 외부 우분투 cron이 22:00 KST에 GitHub workflow_dispatch 트리거. 자세한 메모: [[project-trend-core-engine]].
 
 Tier 1: Sharpe > 0.7, MDD < 25%, OOS/IS ≥ 40%, walk-forward 과반 양수, ≥ 120거래일.  
 Tier 2: 페이퍼 3개월+, 실현성과/백테스트 괴리 < 40%, 페이퍼 Sharpe > 0.5.
