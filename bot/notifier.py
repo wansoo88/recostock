@@ -102,20 +102,31 @@ async def send_daily_signal(
         if tc.get("qqqWeight", 0) > 0:  parts.append(f"QQQ {tc['qqqWeight']*100:.0f}%")
         if tc.get("cashWeight", 0) > 0: parts.append(f"현금/BIL {tc['cashWeight']*100:.0f}%")
         alloc = " + ".join(parts) if parts else "현금 100%"
-        lines.append(f"📐 오늘의 포지션(주력): {alloc} (≈{tc.get('effExposure',0):.2f}x) — {tc.get('note','')}")
+        lines.append(f"📐 오늘의 포지션(주력): {alloc} (≈{tc.get('effExposure',0):.2f}x = 시장 베타 환산)")
+        # Per-leg prices and stop-loss levels for execution
+        ex = tc.get("exec") or {}
+        if ex.get("spy"):
+            lines.append(f"   └ SPY 진입 ${ex['spy']['price']:.2f} · 추세 손절선 ${ex['spy']['stop']:.2f} (이 가격 하향이탈 시 청산)")
+        if ex.get("spxl"):
+            d = ex.get("tiltDaysLeft")
+            extra = f"틸트 만료 ~{d}일" if d is not None else "공포매수 트리거 만료 시 청산"
+            lines.append(f"   └ SPXL 진입 ${ex['spxl']['price']:.2f} · {extra}")
+        if ex.get("qqq"):
+            lines.append(f"   └ QQQ 진입 ${ex['qqq']['price']:.2f} · 추세 손절선 ${ex['qqq']['stop']:.2f}")
 
-    # All-weather ensemble verdict — one unified daily action line.
+    # Tactical satellite — value-add LAYER on top of the core (reframed 2026-05-26)
     ens = regime.get("ensemble")
     if ens:
-        _sz = (ens.get("sizing") or {}).get("sizePct")
-        _szt = f" · 사이즈 {_sz*100:.0f}%" if _sz else ""
         if ens.get("action") == "conviction":
-            lines.append(f"🧭 오늘의 액션(실전): {ens['ticker']} 매수 — 진입 ${ens.get('entry',0):.2f} "
-                         f"/ TP ${ens.get('tp',0):.2f} / SL ${ens.get('sl',0):.2f}{_szt}")
+            spy_w = (tc.get("spyWeight", 0) * 100) if tc else 50
+            new_w = max(spy_w - 8, 0)
+            lines.append(f"📋 보조 전술: {ens['ticker']} 단기 회전 — SPY 비중 {spy_w:.0f}%→{new_w:.0f}%로 줄여 "
+                         f"8%를 {ens['ticker']}에 5일 배분 (자본 추가 X). "
+                         f"진입 ${ens.get('entry',0):.2f}/TP ${ens.get('tp',0):.2f}/SL ${ens.get('sl',0):.2f}")
         elif ens.get("action") == "feardip":
-            lines.append(f"🧭 오늘의 액션(실험·페이퍼): SPY 공포매수 — 진입 ${ens.get('entry',0):.2f}, 10일 보유{_szt}")
-        else:
-            lines.append("🧭 오늘의 액션: 관망 (두 전략 모두 미발사)")
+            # fear-dip already in core SPXL tilt; here = OOS validation only
+            pass  # silenced from telegram, surfaced in 🧪 paper line below
+        # 'none' case: no satellite line — core position is the action.
 
     if report_url:
         lines.append(f"상세(적중률·근거·팩터): {report_url}")

@@ -152,37 +152,54 @@
           <span class="overall ${regimeCls}">${expBadge}</span></div>
         <div style="font-size:15px;font-weight:600;margin-bottom:4px">${alloc}</div>
         <div style="font-size:13px;color:var(--text)">${tc.note}</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:6px">
-          SPY $${tc.price} vs 200일선 $${tc.sma200} (${tc.distPct>=0?'+':''}${tc.distPct}%) · 추세필터: ${tc.trendFilter || '—'}
+        ${(() => {
+          const ex = tc.exec || {}; const rows = [];
+          if (ex.spy)  rows.push(`<tr><td><strong>SPY</strong></td><td>$${ex.spy.price.toFixed(2)}</td><td style="color:var(--red)">$${ex.spy.stop.toFixed(2)}</td><td style="color:var(--muted)">추세 깨지면 청산</td></tr>`);
+          if (ex.spxl) rows.push(`<tr><td><strong>SPXL</strong> (3x)</td><td>$${ex.spxl.price.toFixed(2)}</td><td style="color:var(--muted)">—</td><td style="color:var(--muted)">${ex.tiltDaysLeft != null ? `틸트 만료 ${ex.tiltDaysLeft}일 남음` : '공포매수 트리거 만료 시 청산'}</td></tr>`);
+          if (ex.qqq)  rows.push(`<tr><td><strong>QQQ</strong></td><td>$${ex.qqq.price.toFixed(2)}</td><td style="color:var(--red)">$${ex.qqq.stop.toFixed(2)}</td><td style="color:var(--muted)">추세 깨지면 청산</td></tr>`);
+          return rows.length ? `<table class="cand-table" style="margin-top:10px"><thead><tr><th>종목</th><th>현재가</th><th>추세 손절선</th><th>비고</th></tr></thead><tbody>${rows.join('')}</tbody></table>` : '';
+        })()}
+        <div style="font-size:12px;color:var(--muted);margin-top:8px">
+          ⓘ <strong>효과 노출 ${tc.effExposure}x</strong> = 시장 베타 환산 노출 (SPY 42%×1 + SPXL 7%×3 + QQQ 50%×1 = ${tc.effExposure}). SPXL 레버리지 덕에 자본 100% 안에서도 추가 베타.<br>
+          ⓘ <strong>추세 손절선</strong> = 다음 평일 종가가 이 값보다 낮으면 해당 슬리브 청산(현금화). 추세필터: ${tc.trendFilter || '—'}. SPY $${tc.price} (200일선 ${tc.distPct>=0?'+':''}${tc.distPct}%).
         </div>
         <div style="font-size:11px;color:var(--muted);margin-top:8px;border-top:1px solid #14181f;padding-top:8px">
-          백테스트(SPY+QQQ 50/50, 실제 SPXL decay, VIX≥22 골든크로스 전환, IRX 현금수익): Full OOS +101.6%/Sharpe 1.02/MDD −24%, 2024+ +54.7%/1.37/−11%. 단일 SPY+200SMA(+79%) 대비 +22%p 향상.
+          백테스트(SPY+QQQ 50/50, 실제 SPXL decay, VIX≥22 골든크로스 전환, IRX 현금수익): Full OOS +101.6%/Sharpe 1.02/MDD −24%, 2024+ +54.7%/1.37/−11%.
         </div>
       </div>`;
   }
 
-  // All-weather ensemble verdict (tactical satellite) — conviction OR fear-dip.
+  // Tactical satellite — reframed 2026-05-26 as actionable overlay ON TOP of
+  // the core. Conviction signal -> short-term sector rotation WITHIN the SPY
+  // sleeve (not extra exposure). Fear-dip -> already captured by SPXL tilt
+  // in the core, surfaced here as the OOS validation track.
   const ens = REPORT.regime.ensemble;
   if (ens) {
     const bt = ens.backtest || {};
     let head, cls, body;
-    const sz = ens.sizing || {};
-    const szTxt = sz.sizePct != null
-      ? ` · 권장사이즈 <strong>${(sz.sizePct*100).toFixed(0)}%</strong> <span style="color:var(--muted)">(시스템 자본 대비, 연변동성 ${(sz.annVol*100).toFixed(0)}% 기준)</span>`
-      : '';
+    // Reframed: conviction -> short-term sector rotation WITHIN SPY sleeve
+    // (not added capital). Fear-dip -> already in core via SPXL tilt.
+    const tc2 = REPORT.regime.trendCore || {};
+    const spyW = (tc2.spyWeight || 0) * 100;
+    const newSpyW = Math.max(spyW - 8, 0);
     if (ens.action === 'conviction') {
-      head = '🟢 오늘의 액션 — 실전 매수'; cls = 'pass';
-      body = `<strong>${ens.ticker}</strong> · ${ens.name} — 진입 $${(ens.entry||0).toFixed(2)} / TP $${(ens.tp||0).toFixed(2)} / SL $${(ens.sl||0).toFixed(2)}${szTxt}<br><span style="color:var(--muted)">${ens.note}</span>`;
+      head = '🟢 보조 전술 — 단기 섹터 회전'; cls = 'pass';
+      body = `<strong>${ens.ticker}</strong> · ${ens.name} — 5거래일 보유<br>
+        <div style="margin-top:6px;padding:8px;background:rgba(72,187,120,0.08);border-radius:6px">
+          <strong>실행:</strong> 코어 SPY 비중을 <strong>${spyW.toFixed(0)}% → ${newSpyW.toFixed(0)}%</strong>로 줄이고, 그 <strong>8%</strong>를 <strong>${ens.ticker}</strong>에 배분 (자본 추가 아님 · SPY 슬리브 내 회전).
+        </div>
+        진입 $${(ens.entry||0).toFixed(2)} / TP $${(ens.tp||0).toFixed(2)} (+3%) / SL $${(ens.sl||0).toFixed(2)} (-1%) — 5거래일 후 또는 TP/SL 도달 시 SPY로 복귀.<br>
+        <span style="color:var(--muted)">${ens.note}</span>`;
     } else if (ens.action === 'feardip') {
-      head = '🔵 오늘의 액션 — 실험(페이퍼)'; cls = 'wait';
-      body = `<strong>${ens.ticker}</strong> 공포매수 — 진입 $${(ens.entry||0).toFixed(2)}${szTxt}<br><span style="color:var(--muted)">${ens.note}</span>`;
+      head = '🔵 보조 지표 — 공포매수 OOS 검증'; cls = 'wait';
+      body = `<span style="color:var(--text)">코어의 SPXL 7% 틸트가 같은 공포 신호로 이미 실전 배포 중. 이 패널은 fear-dip의 OOS 페이퍼 트랙 모니터링용입니다 (실전 행동 X).</span>`;
     } else {
-      head = '⏳ 오늘의 액션 — 관망'; cls = 'wait';
-      body = `<span style="color:var(--muted)">${ens.note}</span>`;
+      head = '⏳ 보조 전술 — 대기'; cls = 'wait';
+      body = `<span style="color:var(--muted)">단기 회전 신호 없음 — 코어 포지션 그대로 유지.</span>`;
     }
     document.getElementById('ensemble-panel').innerHTML = `
       <div class="gates-panel" style="border-left:4px solid var(--blue)">
-        <div class="ttl"><span>올웨더 앙상블 (추세 + 공포 평균회귀)</span>
+        <div class="ttl"><span>📋 보조 전술 (코어 위에 얹는 단기 레이어)</span>
           <span class="overall ${cls}">${head}</span></div>
         <div style="font-size:14px;line-height:1.6">${body}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:8px;border-top:1px solid #14181f;padding-top:8px">

@@ -494,7 +494,10 @@ async def main() -> None:
                 # window), which is the panic-bounce tilt trigger.
                 from signals.trend_core import evaluate as trend_eval
                 fd_active = bool(fd_metrics.get("open", 0) > 0 or fd_sig["is_entry"])
-                regime["trendCore"] = trend_eval(_c, fd_active, regime.get("vix"))
+                # Pass the open paper position's entry date (for tilt-window countdown).
+                _open = fd_trades[fd_trades["status"] == "open"] if not fd_trades.empty else fd_trades
+                fd_open_date = str(_open.iloc[0]["entry_date"]) if len(_open) else None
+                regime["trendCore"] = trend_eval(_c, fd_active, regime.get("vix"), fd_open_date)
                 tc = regime["trendCore"]
                 log.info("Trend-core: regime=%s exposure=%.2fx (SPY %.0f%% / SPXL %.0f%%)",
                          tc.get("regime"), tc.get("effExposure", 0),

@@ -65,16 +65,21 @@ def _trend_on(price: pd.Series, vix_latest: float | None) -> tuple[bool | None, 
 
 
 def evaluate(close_df: pd.DataFrame, fear_dip_active: bool,
-             vix_latest: float | None = None) -> dict:
+             vix_latest: float | None = None,
+             fear_dip_open_date: str | None = None) -> dict:
     """Today's core exposure recommendation — vol-adaptive dual-asset (SPY+QQQ).
 
     Each sleeve runs its own vol-adaptive trend filter. SPY sleeve takes the
     SPXL leverage tilt on uptrend+fear-dip; QQQ sleeve is unleveraged.
     Sleeves are independent — if only SPY is in uptrend, only the SPY sleeve
     is invested; the QQQ portion sits in cash earning yield.
+
+    fear_dip_open_date: ISO date string of the open fear-dip paper position's
+    entry, used to compute days remaining in the 10-trading-day tilt window.
     """
     spy = close_df[CORE_TICKER].dropna()
     qqq = close_df[QQQ_TICKER].dropna() if QQQ_TICKER in close_df.columns else pd.Series(dtype=float)
+    spxl = close_df[LEVER_TICKER].dropna() if LEVER_TICKER in close_df.columns else pd.Series(dtype=float)
     if len(spy) < SMA_WINDOW + 1:
         return {"coreOn": None, "note": "200일 SMA 계산에 데이터 부족"}
 
@@ -120,14 +125,43 @@ def evaluate(close_df: pd.DataFrame, fear_dip_active: bool,
     else:
         regime, note = "cash", "양쪽 하락 — 현금 100% (BIL/SGOV 등 단기채 파킹 권장 ~연 4-5%)"
 
+    # Prices for execution
+    spy_px = float(spy.iloc[-1])
+    spy_sma = float(spy.rolling(SMA_WINDOW).mean().iloc[-1])
+    spy_50 = float(spy.rolling(SMA_FAST).mean().iloc[-1])
+    qqq_px = float(qqq.iloc[-1]) if len(qqq) else None
+    qqq_sma = float(qqq.rolling(SMA_WINDOW).mean().iloc[-1]) if len(qqq) >= SMA_WINDOW else None
+    qqq_50 = float(qqq.rolling(SMA_FAST).mean().iloc[-1]) if len(qqq) >= SMA_FAST else None
+    spxl_px = float(spxl.iloc[-1]) if len(spxl) else None
+    # Active filter determines the actual stop level the user should watch.
+    high_vol = vix_latest is not None and vix_latest >= VIX_REGIME_THRESHOLD
+    spy_stop = spy_50 if high_vol else spy_sma
+    qqq_stop = qqq_50 if (high_vol and qqq_50 is not None) else qqq_sma
+
+    # Fear-dip tilt window: 10 trading days from open. Compute days remaining.
+    tilt_days_left = None
+    if fear_dip_open_date and spxl_w > 0:
+        try:
+            od = pd.Timestamp(fear_dip_open_date)
+            elapsed = sum(1 for d in spy.index if od <= d <= spy.index[-1])
+            tilt_days_left = max(0, 10 - elapsed + 1)  # +1 includes today
+        except Exception:
+            tilt_days_left = None
+
     return {
         "coreOn": spy_on, "coreSpyOn": spy_on, "coreQqqOn": qqq_on,
         "trendFilter": spy_filter,
-        "price": round(float(spy.iloc[-1]), 2),
-        "sma200": round(float(spy.rolling(SMA_WINDOW).mean().iloc[-1]), 2),
-        "distPct": round((float(spy.iloc[-1]) / float(spy.rolling(SMA_WINDOW).mean().iloc[-1]) - 1) * 100, 2),
+        "price": round(spy_px, 2), "sma200": round(spy_sma, 2),
+        "distPct": round((spy_px / spy_sma - 1) * 100, 2),
         "spyWeight": round(spy_w, 2), "spxlWeight": round(spxl_w, 2),
         "qqqWeight": round(qqq_w, 2), "cashWeight": round(cash_w, 2),
-        "effExposure": round(total_eff, 2),  # total effective exposure (SPY-equiv units)
+        "effExposure": round(total_eff, 2),
         "regime": regime, "note": note,
+        # Execution detail (added 2026-05-26 for actionable display):
+        "exec": {
+            "spy":  {"price": round(spy_px, 2),  "stop": round(spy_stop, 2)} if spy_on else None,
+            "spxl": {"price": round(spxl_px, 2)} if (spxl_w > 0 and spxl_px) else None,
+            "qqq":  {"price": round(qqq_px, 2),  "stop": round(qqq_stop, 2)} if (qqq_on and qqq_px and qqq_stop) else None,
+            "tiltDaysLeft": tilt_days_left,
+        },
     }
