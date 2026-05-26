@@ -4,7 +4,7 @@ import pandas as pd
 
 from signals.trend_core import (evaluate, effective_exposure, TILT_SPXL_WEIGHT,
                                  SPY_SLEEVE_WEIGHT, QQQ_SLEEVE_WEIGHT,
-                                 VIX_REGIME_THRESHOLD)
+                                 VIX_REGIME_THRESHOLD, ALWAYS_ON_SPXL)
 
 
 def _close(spy_trend="up", qqq_trend="up", n=260):
@@ -19,9 +19,10 @@ def _close(spy_trend="up", qqq_trend="up", n=260):
 
 def test_dual_uptrend_no_fear():
     r = evaluate(_close("up", "up"), fear_dip_active=False, vix_latest=15.0)
-    assert r["spyWeight"] == SPY_SLEEVE_WEIGHT
+    # Baseline always-on SPXL while trend is on (no panic).
+    assert r["spyWeight"] == round(SPY_SLEEVE_WEIGHT * (1 - ALWAYS_ON_SPXL), 2)
+    assert r["spxlWeight"] == round(SPY_SLEEVE_WEIGHT * ALWAYS_ON_SPXL, 2)
     assert r["qqqWeight"] == QQQ_SLEEVE_WEIGHT
-    assert r["spxlWeight"] == 0.0
     assert r["regime"] == "dual_uptrend"
 
 
@@ -37,7 +38,9 @@ def test_dual_uptrend_with_fear_tilts_spy_sleeve_only():
 
 def test_spy_only_uptrend():
     r = evaluate(_close("up", "down"), fear_dip_active=False, vix_latest=15.0)
-    assert r["spyWeight"] == SPY_SLEEVE_WEIGHT
+    # Baseline always-on SPXL while SPY trend is on.
+    assert r["spyWeight"] == round(SPY_SLEEVE_WEIGHT * (1 - ALWAYS_ON_SPXL), 2)
+    assert r["spxlWeight"] == round(SPY_SLEEVE_WEIGHT * ALWAYS_ON_SPXL, 2)
     assert r["qqqWeight"] == 0.0
     assert r["regime"] == "spy_only"
 

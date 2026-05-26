@@ -36,6 +36,10 @@ QQQ_SLEEVE_WEIGHT = 1.0 - SPY_SLEEVE_WEIGHT
 # fraction of the SPY-sleeve shifted to SPXL on uptrend fear-dip days.
 # 0.15 -> ~1.3x effective on the SPY sleeve.
 TILT_SPXL_WEIGHT = float(getattr(config, "TREND_CORE_TILT_WEIGHT", 0.15))
+# baseline always-on SPXL when SPY trend is on (no panic) — adds +2.6%p Full
+# OOS / +1.9%p Holdout (2026-05-26 backtest) by keeping a small lever active
+# during the trend's 81% time-on. Goes to 0 when trend turns off.
+ALWAYS_ON_SPXL = float(getattr(config, "TREND_CORE_ALWAYS_ON_SPXL", 0.05))
 # vol-adaptive filter: switch to golden-cross when VIX above this threshold.
 VIX_REGIME_THRESHOLD = float(getattr(config, "TREND_CORE_VIX_THRESHOLD", 22.0))
 
@@ -88,13 +92,16 @@ def evaluate(close_df: pd.DataFrame, fear_dip_active: bool,
     w_tilt = TILT_SPXL_WEIGHT
 
     # SPY sleeve (size = SPY_SLEEVE_WEIGHT of total capital)
+    # Baseline always-on SPXL ALWAYS_ON_SPXL when trend on (no panic), bumped to
+    # TILT_SPXL_WEIGHT on fear-dip days. 0 when trend off.
     spy_w = spxl_w = 0.0
     if spy_on:
         if fear_dip_active:
             spy_w = SPY_SLEEVE_WEIGHT * (1 - w_tilt)
             spxl_w = SPY_SLEEVE_WEIGHT * w_tilt
         else:
-            spy_w = SPY_SLEEVE_WEIGHT
+            spy_w = SPY_SLEEVE_WEIGHT * (1 - ALWAYS_ON_SPXL)
+            spxl_w = SPY_SLEEVE_WEIGHT * ALWAYS_ON_SPXL
     elif fear_dip_active:
         # Downtrend + fear: SPY sleeve goes 100% SPY (dip re-entry, no leverage).
         spy_w = SPY_SLEEVE_WEIGHT
