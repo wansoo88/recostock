@@ -7,17 +7,24 @@ drift with half the drawdown (+78.6% / Sharpe 0.99 / MDD -22% full OOS;
 +45% / 1.39 / -10.5% in 2024+), and beats every blend with the satellite
 signals. So the trend core is the engine.
 
-The validated enhancement (user opted into leverage): on fear-dip days that
-fall in an uptrend (the model's panic-bounce signal), tilt ~15% of capital
-into SPXL (3x S&P) for ~1.3x effective exposure. Re-validated with REAL SPXL
-prices (decay included): +92.2% full OOS / +48.7% 2024+, Sharpe maintained,
-MDD unchanged. 1.5x (25% SPXL) returns more but with more decay drag.
+The validated leverage layers (user opted into leverage):
+  1. Always-on 5% SPXL while the trend is on (2026-05-26).
+  2. Fear-dip tilt: 15% SPXL on uptrend panic-bounce days (2026-05-22).
+  3. Calm-uptrend boost (2026-05-30): when BOTH sleeves are in an uptrend AND
+     VIX < CALM_VIX_MAX, the SPY-sleeve SPXL fraction rises 5% → STRONG_SPXL
+     (20%). This spends the engine's unused risk budget (its -14% MDD sat far
+     under the 25% gate) to stop trailing SPY in calm bull years — WITHOUT
+     levering into a rising-vol top, so the drawdown profile is unchanged.
+     Cost-adjusted walk-forward: Full OOS +109%→+131% (Sharpe 1.11→1.17,
+     MDD -14.0% both), Holdout +56%→+72%. Beats baseline every year, 2022
+     bear unchanged (-9.2%), 5/5 WF folds positive. See config.py.
 
-Daily exposure recommendation:
-    SPY > 200d SMA  &  fear-dip active  -> SPY (1-w) + SPXL w   (~1.3x, tilt)
-    SPY > 200d SMA                       -> SPY 100%             (core long)
-    SPY <= 200d SMA &  fear-dip active   -> SPY 100%             (dip re-entry, no leverage in downtrend)
-    SPY <= 200d SMA                      -> cash                 (trend off)
+Daily exposure recommendation (per sleeve, each gated by its own trend filter):
+    both up & VIX<16                     -> SPY + 20% SPXL boost + QQQ  (~1.4x)
+    SPY > SMA & fear-dip active          -> SPY + 15% SPXL tilt
+    SPY > SMA                            -> SPY + 5% SPXL  (always-on)
+    SPY <= SMA & fear-dip active         -> SPY 100% (dip re-entry, no leverage)
+    SPY <= SMA                           -> cash (trend off, BIL/SGOV parking)
 """
 from __future__ import annotations
 
@@ -40,6 +47,13 @@ TILT_SPXL_WEIGHT = float(getattr(config, "TREND_CORE_TILT_WEIGHT", 0.15))
 # OOS / +1.9%p Holdout (2026-05-26 backtest) by keeping a small lever active
 # during the trend's 81% time-on. Goes to 0 when trend turns off.
 ALWAYS_ON_SPXL = float(getattr(config, "TREND_CORE_ALWAYS_ON_SPXL", 0.05))
+# calm-uptrend boost (2026-05-30): SPXL fraction rises to STRONG_SPXL when BOTH
+# sleeves are in an uptrend AND VIX < CALM_VIX_MAX. Spends the engine's unused
+# risk budget in confirmed calm bulls; never levers into a rising-vol top, so
+# MDD is unchanged. Full OOS +109%→+131% / Sharpe 1.11→1.17, MDD -14.0% both.
+# See config.py for the full validated backtest. Set STRONG=ALWAYS_ON to disable.
+STRONG_SPXL = float(getattr(config, "TREND_CORE_STRONG_SPXL", 0.20))
+CALM_VIX_MAX = float(getattr(config, "TREND_CORE_CALM_VIX_MAX", 16.0))
 # vol-adaptive filter: switch to golden-cross when VIX above this threshold.
 VIX_REGIME_THRESHOLD = float(getattr(config, "TREND_CORE_VIX_THRESHOLD", 22.0))
 
@@ -91,17 +105,25 @@ def evaluate(close_df: pd.DataFrame, fear_dip_active: bool,
     qqq_on, _ = _trend_on(qqq, vix_latest) if len(qqq) >= SMA_WINDOW + 1 else (False, "")
     w_tilt = TILT_SPXL_WEIGHT
 
-    # SPY sleeve (size = SPY_SLEEVE_WEIGHT of total capital)
-    # Baseline always-on SPXL ALWAYS_ON_SPXL when trend on (no panic), bumped to
-    # TILT_SPXL_WEIGHT on fear-dip days. 0 when trend off.
+    # Calm uptrend = BOTH sleeves trending up AND VIX below the calm threshold.
+    # This is the only regime that earns the SPXL boost. fear-dip days keep their
+    # own tilt and take precedence (they are stress days, rarely calm anyway).
+    calm_uptrend = bool(spy_on and qqq_on and vix_latest is not None
+                        and vix_latest < CALM_VIX_MAX)
+
+    # SPY sleeve (size = SPY_SLEEVE_WEIGHT of total capital). The SPXL fraction
+    # of the sleeve is: 0.15 on fear-dip days, STRONG_SPXL in a calm uptrend,
+    # ALWAYS_ON_SPXL otherwise. 0 when the SPY trend is off.
     spy_w = spxl_w = 0.0
     if spy_on:
         if fear_dip_active:
-            spy_w = SPY_SLEEVE_WEIGHT * (1 - w_tilt)
-            spxl_w = SPY_SLEEVE_WEIGHT * w_tilt
+            spxl_frac = w_tilt
+        elif calm_uptrend:
+            spxl_frac = STRONG_SPXL
         else:
-            spy_w = SPY_SLEEVE_WEIGHT * (1 - ALWAYS_ON_SPXL)
-            spxl_w = SPY_SLEEVE_WEIGHT * ALWAYS_ON_SPXL
+            spxl_frac = ALWAYS_ON_SPXL
+        spy_w = SPY_SLEEVE_WEIGHT * (1 - spxl_frac)
+        spxl_w = SPY_SLEEVE_WEIGHT * spxl_frac
     elif fear_dip_active:
         # Downtrend + fear: SPY sleeve goes 100% SPY (dip re-entry, no leverage).
         spy_w = SPY_SLEEVE_WEIGHT
@@ -118,8 +140,15 @@ def evaluate(close_df: pd.DataFrame, fear_dip_active: bool,
         regime, note = "dual_uptrend_panic", (
             f"양쪽 상승 + 공포 — SPY {spy_w*100:.0f}% + SPXL {spxl_w*100:.0f}% + QQQ {qqq_w*100:.0f}% "
             f"(SPY 슬리브 ≈{eff_spy:.2f}x)")
+    elif calm_uptrend:
+        regime, note = "dual_uptrend_boost", (
+            f"양쪽 상승 + 저변동(VIX<{CALM_VIX_MAX:.0f}) — SPY {spy_w*100:.0f}% + SPXL {spxl_w*100:.0f}% + "
+            f"QQQ {qqq_w*100:.0f}% · 캄-불 레버 부스트 (SPY 슬리브 ≈{eff_spy:.2f}x)")
     elif spy_on and qqq_on:
-        regime, note = "dual_uptrend", f"양쪽 상승 — SPY {spy_w*100:.0f}% + QQQ {qqq_w*100:.0f}%"
+        regime, note = "dual_uptrend", (
+            f"양쪽 상승 — SPY {spy_w*100:.0f}%"
+            + (f" + SPXL {spxl_w*100:.0f}%" if spxl_w > 0 else "")
+            + f" + QQQ {qqq_w*100:.0f}%")
     elif spy_on:
         regime, note = "spy_only", (
             f"SPY만 상승 — SPY {spy_w*100:.0f}%"
@@ -158,6 +187,7 @@ def evaluate(close_df: pd.DataFrame, fear_dip_active: bool,
     return {
         "coreOn": spy_on, "coreSpyOn": spy_on, "coreQqqOn": qqq_on,
         "trendFilter": spy_filter,
+        "calmBoost": calm_uptrend,
         "price": round(spy_px, 2), "sma200": round(spy_sma, 2),
         "distPct": round((spy_px / spy_sma - 1) * 100, 2),
         "spyWeight": round(spy_w, 2), "spxlWeight": round(spxl_w, 2),

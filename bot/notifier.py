@@ -102,7 +102,8 @@ async def send_daily_signal(
         if tc.get("qqqWeight", 0) > 0:  parts.append(f"QQQ {tc['qqqWeight']*100:.0f}%")
         if tc.get("cashWeight", 0) > 0: parts.append(f"현금/BIL {tc['cashWeight']*100:.0f}%")
         alloc = " + ".join(parts) if parts else "현금 100%"
-        lines.append(f"📐 오늘의 포지션(주력): {alloc} (≈{tc.get('effExposure',0):.2f}x = 시장 베타 환산)")
+        boost = " ⚡캄-불 부스트" if tc.get("calmBoost") else ""
+        lines.append(f"📐 오늘의 포지션(주력): {alloc} (≈{tc.get('effExposure',0):.2f}x = 시장 베타 환산){boost}")
         # Per-leg prices and stop-loss levels for execution
         ex = tc.get("exec") or {}
         if ex.get("spy"):

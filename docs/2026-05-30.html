@@ -119,7 +119,84 @@
 </div>
 
 <script>
-/* REPORT_DATA_PLACEHOLDER */
+const REPORT = {
+  "date": "2026-05-30",
+  "regime": {
+    "label": "normal",
+    "exposure": 1.0,
+    "vix": 15.319999694824219,
+    "fearDip": {
+      "isEntry": false,
+      "score": 0.2042127047833177,
+      "threshold": 0.43410472050136806,
+      "percentile": 0.6062,
+      "entry": 756.47998046875,
+      "paper": {
+        "n": 0,
+        "winrate": 0.0,
+        "avg_pnl": 0.0,
+        "total": 0.0,
+        "open": 1
+      }
+    },
+    "trendCore": {
+      "coreOn": true,
+      "coreSpyOn": true,
+      "coreQqqOn": true,
+      "trendFilter": "200SMA (저변동)",
+      "calmBoost": true,
+      "price": 756.48,
+      "sma200": 678.68,
+      "distPct": 11.46,
+      "spyWeight": 0.42,
+      "spxlWeight": 0.07,
+      "qqqWeight": 0.5,
+      "cashWeight": 0.0,
+      "effExposure": 1.15,
+      "regime": "dual_uptrend_panic",
+      "note": "양쪽 상승 + 공포 — SPY 42% + SPXL 8% + QQQ 50% (SPY 슬리브 ≈1.30x)",
+      "exec": {
+        "spy": {
+          "price": 756.48,
+          "stop": 678.68
+        },
+        "spxl": null,
+        "qqq": {
+          "price": 738.31,
+          "stop": 616.82
+        },
+        "tiltDaysLeft": 5
+      }
+    },
+    "ensemble": {
+      "action": "none",
+      "live": false,
+      "note": "오늘은 두 전략 모두 미발사 — 관망",
+      "backtest": {
+        "combinedTrades": 105,
+        "holdoutSharpe": 2.41,
+        "overlapDays": 0,
+        "fullTotal": 96.1
+      }
+    }
+  },
+  "signals": [],
+  "paper": {
+    "sharpe": 1.5508,
+    "mdd": -0.4105,
+    "total_return": 2.8667,
+    "n_trades": 266,
+    "n_weeks": 154,
+    "winrate": 0.5752,
+    "avg_win": 0.03596,
+    "avg_loss": 0.02897,
+    "payoff": 1.241,
+    "weeks_elapsed": 303
+  },
+  "paperOpen": [],
+  "gates": [],
+  "strategy": {}
+};
 
 (function () {
   if (typeof REPORT === 'undefined') {
