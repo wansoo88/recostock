@@ -104,7 +104,6 @@
 </div>
 
 <div id="gates-panel"></div>
-<div id="toppick-panel"></div>
 <div id="candidates-panel"></div>
 <div id="feardip-panel"></div>
 
@@ -279,62 +278,51 @@
         </div>
         ${rows}
         <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5;border-top:1px solid #14181f;padding-top:8px">
-          레짐 게이트는 <strong>1단(시장 환경)</strong>입니다. 실제 발사는 <strong>2단(종목별 모델 확신도 ≥ 0.65)</strong>까지 통과해야 합니다. 아래 워치리스트에서 종목별 확신도를 확인하세요.
+          레짐 게이트는 <strong>1단(시장 환경)</strong>입니다. 실제 발사는 <strong>2단(종목별 모델 확신도 ≥ 0.65)</strong>까지 통과해야 합니다. 단, EMA 평활 후 확신도는 0.65에 거의 도달하지 않아(역대 후보 전부 미달, 검증됨) conviction 보조신호는 매우 드물게만 발사됩니다 — 평소엔 위 추세코어가 단독 주력입니다.
         </div>
       </div>`;
   }
 
-  // Long-only candidate watchlist + top pick (added 2026-05-20)
+  // Sector/core relative-strength monitor (rebuilt 2026-05-29).
+  // The model's confidence proba has ~zero OOS rank correlation with wins
+  // (Spearman -0.02, signals/calibration.py), so ranking names by it is ranking
+  // by noise — it froze on one ticker (XLI) and stamped a fixed +3% target on
+  // every name. This ranks by relative strength (1m+3m momentum, rotates daily)
+  // and shows a volatility-scaled 5-day range. CONTEXT only — the live action is
+  // the trend-core panel above.
   const cands = REPORT.regime.candidates || [];
-  const thrC = REPORT.regime.candidateThreshold || 0.65;
   if (cands.length) {
-    const near = thrC - 0.05;
-    const confCls = c => c.passed ? 'conf-pass' : (c.confidence >= near ? 'conf-near' : 'conf-low');
-    const light = c => c.passed ? '🟢' : (c.confidence >= near ? '🟡' : '🔴');
-    const tierCls = t => t === '고확신' ? 'conf-pass' : (t === '표준' ? 'conf-near' : 'conf-low');
+    const trendDot = c => (c.above200 ? (c.above50 ? '🟢' : '🟡') : '🔴');
+    const trendTxt = c => (c.above200 ? (c.above50 ? '상승' : '둔화') : '하락');
+    const rsCls = c => ((c.rs || 0) > 0 ? 'conf-pass' : 'conf-low');
     const rows = cands.map(c => `
       <tr>
-        <td>${light(c)} <strong>${c.ticker}</strong></td>
+        <td>${trendDot(c)} <strong>${c.ticker}</strong></td>
         <td style="color:var(--muted)">${c.name}</td>
-        <td class="conf-cell ${confCls(c)}">${c.confidence.toFixed(3)}</td>
-        <td title="모델확신도를 실측 승률로 보정한 값">${c.calWin != null ? (c.calWin*100).toFixed(0)+'%' : '—'}</td>
+        <td class="conf-cell ${rsCls(c)}">${((c.rs||0)*100>=0?'+':'')}${((c.rs||0)*100).toFixed(1)}%</td>
+        <td style="color:var(--muted)">${trendTxt(c)}</td>
         <td>$${c.entry.toFixed(2)}</td>
-        <td style="color:var(--green)">$${c.tp.toFixed(2)}</td>
-        <td style="color:var(--red)">$${c.sl.toFixed(2)}</td>
-        <td>${(c.estEv*100>=0?'+':'')}${(c.estEv*100).toFixed(2)}%</td>
+        <td style="color:var(--green)">$${(c.hi!=null?c.hi:c.entry).toFixed(2)}</td>
+        <td style="color:var(--red)">$${(c.lo!=null?c.lo:c.entry).toFixed(2)}</td>
+        <td title="모델확신도를 OOS 실측 승률로 보정한 값">${c.calWin != null ? (c.calWin*100).toFixed(0)+'%' : '—'}</td>
       </tr>`).join('');
     document.getElementById('candidates-panel').innerHTML = `
       <div class="cand-panel">
-        <div class="ttl">롱 후보 워치리스트 — 모델확신도순 (기준 ${thrC.toFixed(2)} · 🟢통과 🟡근접 🔴미달)</div>
+        <div class="ttl">섹터·코어 상대강도 모니터 — 관전용 (실거래는 위 '오늘의 포지션')</div>
         <table class="cand-table">
           <thead><tr>
-            <th>종목</th><th>이름</th><th>확신도</th><th>추정승률</th><th>진입</th><th>목표(TP+3%)</th><th>손절(SL-1%)</th><th>기대수익*</th>
+            <th>종목</th><th>이름</th><th>상대강도<br>(1·3개월)</th><th>추세<br>(50/200)</th><th>현재가</th><th>+1σ<br>(5일)</th><th>−1σ<br>(5일)</th><th>보정승률</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
         <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
-          <strong>추정승률</strong> = 모델확신도를 OOS 실측에 isotonic 보정한 값. 모델확신도(0.74 등)는 실제 승률(~57%)을 과대표시하며, 확신도 크기와 승률의 순위상관은 사실상 0(검증됨)이라 보정값을 신뢰하세요.<br>
-          *기대수익 = 보정승률×(+3%)−(1−보정승률)×(−1%)−비용 0.25%.<br>
-          검증된 전략 성과는 주간 K=1(매주 최고 1종목) 주기 기준 Holdout WR 73.7%(n=19, 소표본)·Full 61%(n=31). 🟢 통과 종목에만 적용. 숏(인버스)은 백테스트 결과 알파 없어 미포함.
+          <strong>상대강도</strong>(1·3개월 수익률 블렌드) 내림차순 정렬 — 매일 회전하는 경제적 지표입니다.
+          <strong>+1σ / −1σ</strong>는 각 종목 최근 변동성으로 계산한 5거래일 예상 등락폭(<u>고정 3% 아님</u>)입니다.<br>
+          <strong>보정승률</strong>은 모델확신도를 OOS 실측에 isotonic 보정한 값. 모델확신도 크기와 승률의 순위상관은 사실상 0(Spearman −0.02, 검증됨)이라 종목 선택 근거로 쓰지 않습니다 — 보정값이 ~57%(기저 57.3%)로 거의 평탄한 건 모델이 섹터 우열을 못 가린다는 뜻입니다.<br>
+          이 표는 <strong>맥락 참고용</strong>이며 진입/목표/손절 트레이드 지시가 아닙니다. 숏(인버스)은 백테스트상 알파 없어 제외.
         </div>
       </div>`;
 
-    // Top pick: best candidate that cleared the gate; else nearest as 대기.
-    const passed = cands.filter(c => c.passed);
-    const pick = passed.length ? passed[0] : cands[0];
-    const isWaiting = !passed.length;
-    document.getElementById('toppick-panel').innerHTML = `
-      <div class="toppick ${isWaiting ? 'waiting' : ''}">
-        <div class="tp-tag">${isWaiting ? '⏳ 오늘의 TOP PICK — 대기 (진입 조건 미충족)' : '🎯 오늘의 TOP PICK — 진입 가능'}</div>
-        <div class="tp-tk">${pick.ticker} · ${pick.name}</div>
-        <div class="tp-reason">
-          모델확신도 <strong>${pick.confidence.toFixed(3)}</strong> → 추정 실제승률 <strong>${pick.calWin != null ? (pick.calWin*100).toFixed(0)+'%' : '—'}</strong> (기준 ${thrC.toFixed(2)})
-          · 진입 $${pick.entry.toFixed(2)} · 목표 $${pick.tp.toFixed(2)} · 손절 $${pick.sl.toFixed(2)}<br>
-          ${isWaiting
-            ? `오늘은 9개 롱 후보 중 0.65를 넘긴 종목이 없어 <strong>진입하지 않습니다.</strong> 위 종목이 확신도 1위로 가장 근접 — 0.65 돌파 시 첫 후보입니다.`
-            : `9개 롱 후보 중 확신도 1위로 게이트를 통과했습니다. 손익비 3:1 (TP +3% / SL −1%) 구조.`}
-        </div>
-      </div>`;
   }
 
   // Fear-dip experimental signal (paper-only, added 2026-05-20)

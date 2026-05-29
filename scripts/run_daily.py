@@ -322,12 +322,18 @@ async def main() -> None:
                         "full_wr": 0.613, "full_n": 31,
                     }
 
-                    # Long-only candidate watchlist — rank the full core+sector
-                    # universe by model confidence with price levels, so the user
-                    # sees WHICH names are closest to firing even on a 0-signal day.
-                    # Shorts are intentionally absent: inverse / inverted-proba
-                    # backtests (2026-05-20) showed no edge — negative expectancy
-                    # and negative Sharpe across every threshold and regime gate.
+                    # Sector/core RELATIVE-STRENGTH monitor (rebuilt 2026-05-29).
+                    # The model's confidence proba has ~zero OOS rank correlation
+                    # with wins (Spearman -0.02, see signals/calibration.py), so the
+                    # previous "rank by confidence" watchlist was ranking by NOISE:
+                    # it froze on one ticker (XLI) for weeks and stamped a fixed
+                    # +3%/-1% target on every name regardless of its volatility.
+                    # This ranks by relative strength (1m+3m momentum — rotates
+                    # daily, economically grounded) and sizes the displayed range
+                    # by each ETF's own realized volatility. It is a CONTEXT
+                    # monitor, not a trade signal (live action = trend-core panel).
+                    # `passed` is still the TRUE conviction gate (raw EMA >= 0.65
+                    # multi-EMA) so the regime-gates banner stays accurate.
                     thr_c = config.CONVICTION_THRESHOLD
                     candidates: list[dict] = []
                     for tk, sc in score_result.items():
@@ -340,34 +346,46 @@ async def main() -> None:
                         if e5 is None:
                             continue
                         e3, e7 = sc.get("ema_proba_3"), sc.get("ema_proba_7")
-                        px = float(latest_close.get(tk, 0.0))
+                        series = close_df[tk].dropna() if tk in close_df.columns else None
+                        if series is None or len(series) < 64:
+                            continue
+                        px = float(series.iloc[-1])
                         if px <= 0:
                             continue
+                        # Relative strength: blended 1-month + 3-month return.
+                        rs = (0.5 * (px / float(series.iloc[-22]) - 1.0)
+                              + 0.5 * (px / float(series.iloc[-64]) - 1.0))
+                        # Trend posture vs 50/200-day SMA.
+                        sma50 = float(series.tail(50).mean())
+                        sma200 = float(series.tail(200).mean()) if len(series) >= 200 else sma50
+                        above50, above200 = px > sma50, px > sma200
+                        # Volatility-scaled 5-day expected range (+/-1 sigma) — the
+                        # honest, per-ETF replacement for the fixed 3% target.
+                        dvol = float(series.pct_change().dropna().tail(20).std())
+                        band = dvol * (5 ** 0.5) if dvol == dvol else 0.0
+                        # True conviction gate (drives the regime-gates banner only).
                         passed = (float(e5) >= thr_c and e3 is not None and e7 is not None
                                   and float(e3) >= thr_c and float(e7) >= thr_c)
-                        # EV uses the CALIBRATED win prob (raw proba overstates
-                        # odds ~0.74 vs ~0.57 actual), not the raw confidence.
+                        # Calibrated win prob (isotonic, ~flat ≈57%) — shown to be
+                        # honest, NOT used to rank (it has no discriminating power).
                         cal_w = _calibrated_winrate(float(e5)) or float(e5)
-                        est_ev = (cal_w * config.CONVICTION_TP_PCT
-                                  - (1 - cal_w) * config.CONVICTION_SL_PCT
-                                  - config.TOTAL_COST_ROUNDTRIP)
-                        # Confidence tier from the validated monotonic relationship
-                        # (higher proba -> higher realized WR/EV, n=469 OOS sample).
-                        tier = ("고확신" if float(e5) >= 0.70
-                                else "표준" if float(e5) >= thr_c
-                                else "기준미달")
+                        est_ev = band * (2 * cal_w - 1) - config.TOTAL_COST_ROUNDTRIP
                         candidates.append({
                             "ticker": tk, "name": m.name,
                             "confidence": round(float(e5), 4),
                             "calWin": _calibrated_winrate(float(e5)),
+                            "rs": round(rs, 4),
+                            "above50": bool(above50), "above200": bool(above200),
                             "entry": round(px, 2),
-                            "tp": round(px * (1 + config.CONVICTION_TP_PCT), 2),
-                            "sl": round(px * (1 - config.CONVICTION_SL_PCT), 2),
+                            "hi": round(px * (1 + band), 2),
+                            "lo": round(px * (1 - band), 2),
+                            "bandPct": round(band, 4),
                             "estEv": round(est_ev, 5),
                             "passed": bool(passed),
-                            "tier": tier,
                         })
-                    candidates.sort(key=lambda c: c["confidence"], reverse=True)
+                    # Rank by relative strength (rotates daily) — NOT by the
+                    # no-skill confidence proba.
+                    candidates.sort(key=lambda c: c["rs"], reverse=True)
                     regime["candidates"] = candidates
                     regime["candidateThreshold"] = thr_c
 
