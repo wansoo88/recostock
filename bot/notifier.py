@@ -106,16 +106,30 @@ async def send_daily_signal(
             lines.append(track)
 
     # Trend-core position (primary engine) — lead the actionable section.
+    # When the RSI sector sleeve is blended in, the composed portfolio is the
+    # headline allocation; otherwise fall back to the pure engine weights.
     tc = regime.get("trendCore")
+    pf = regime.get("portfolio") or {}
     if tc and tc.get("coreOn") is not None:
-        parts = []
-        if tc.get("spyWeight", 0) > 0:  parts.append(f"SPY {tc['spyWeight']*100:.0f}%")
-        if tc.get("spxlWeight", 0) > 0: parts.append(f"SPXL {tc['spxlWeight']*100:.0f}%")
-        if tc.get("qqqWeight", 0) > 0:  parts.append(f"QQQ {tc['qqqWeight']*100:.0f}%")
-        if tc.get("cashWeight", 0) > 0: parts.append(f"현금/BIL {tc['cashWeight']*100:.0f}%")
-        alloc = " + ".join(parts) if parts else "현금 100%"
         boost = " ⚡캄-불 부스트" if tc.get("calmBoost") else ""
-        lines.append(f"📐 오늘의 포지션(주력): {alloc} (≈{tc.get('effExposure',0):.2f}x = 시장 베타 환산){boost}")
+        if pf.get("enabled") and pf.get("weights"):
+            lev = lambda t: " (3x)" if t in ("SPXL", "TQQQ") else ""
+            parts = [f"{t} {w*100:.0f}%{lev(t)}"
+                     for t, w in sorted(pf["weights"].items(), key=lambda kv: -kv[1]) if w > 0.001]
+            if pf.get("cashWeight", 0) > 0.001:
+                parts.append(f"현금/BIL {pf['cashWeight']*100:.0f}%")
+            alloc = " + ".join(parts) if parts else "현금 100%"
+            lines.append(f"📐 오늘의 포지션(주력 블렌드): {alloc} "
+                         f"(≈{pf.get('effExposure',0):.2f}x = 시장 베타 환산){boost}")
+            lines.append(f"   └ 추세코어 {pf.get('coreWeight',0.75)*100:.0f}% + RSI 섹터 슬리브 {pf.get('sleeveWeight',0.25)*100:.0f}%")
+        else:
+            parts = []
+            if tc.get("spyWeight", 0) > 0:  parts.append(f"SPY {tc['spyWeight']*100:.0f}%")
+            if tc.get("spxlWeight", 0) > 0: parts.append(f"SPXL {tc['spxlWeight']*100:.0f}%")
+            if tc.get("qqqWeight", 0) > 0:  parts.append(f"QQQ {tc['qqqWeight']*100:.0f}%")
+            if tc.get("cashWeight", 0) > 0: parts.append(f"현금/BIL {tc['cashWeight']*100:.0f}%")
+            alloc = " + ".join(parts) if parts else "현금 100%"
+            lines.append(f"📐 오늘의 포지션(주력): {alloc} (≈{tc.get('effExposure',0):.2f}x = 시장 베타 환산){boost}")
         # Per-leg prices and stop-loss levels for execution
         ex = tc.get("exec") or {}
         if ex.get("spy"):

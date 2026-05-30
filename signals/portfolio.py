@@ -46,7 +46,13 @@ def compose(trend_core: dict, sector_satellite: dict | None,
       note    : human summary
       enabled : whether the sleeve was actually applied
     """
-    core_w = max(0.0, 1.0 - sleeve_weight) if sleeve_weight > 0 else 1.0
+    pick = list((sector_satellite or {}).get("pick") or [])
+    top_k = int((sector_satellite or {}).get("topK", 2)) or 2
+    # The sleeve is applied only when enabled AND it has data. When it can't be
+    # applied, the engine runs at FULL capital (no idle cash) — clean fallback.
+    sleeve_enabled = (sleeve_weight > 0 and bool(sector_satellite)
+                      and bool((sector_satellite or {}).get("ranked")))
+    core_w = max(0.0, 1.0 - sleeve_weight) if sleeve_enabled else 1.0
 
     # ── Engine leg: scale its weights to core_w of total capital ──────────────
     weights: dict[str, float] = {}
@@ -56,10 +62,6 @@ def compose(trend_core: dict, sector_satellite: dict | None,
         if v > 0:
             weights[tk] = weights.get(tk, 0.0) + v * core_w
             eng_invested += v * core_w
-
-    pick = list((sector_satellite or {}).get("pick") or [])
-    top_k = int((sector_satellite or {}).get("topK", 2)) or 2
-    sleeve_enabled = sleeve_weight > 0 and bool(sector_satellite) and bool((sector_satellite or {}).get("ranked"))
 
     # ── Sleeve leg: split sleeve_weight across the picks; empty slots = cash ───
     sleeve_invested = 0.0

@@ -140,12 +140,25 @@
   if (tc && tc.coreOn != null) {
     const regimeCls = tc.regime === 'cash' ? 'fail' : (tc.regime.includes('panic') ? 'wait' : 'pass');
     const boostTag = tc.calmBoost ? ' ⚡캄-불 부스트' : '';
-    const expBadge = `노출 ${tc.effExposure}x${boostTag}`;
+    // Composed portfolio (engine + RSI sector sleeve) is the actionable headline
+    // when enabled; otherwise fall back to the pure engine weights.
+    const pf = REPORT.regime.portfolio;
+    const blended = !!(pf && pf.enabled);
+    const effExp = blended ? pf.effExposure : tc.effExposure;
+    const expBadge = `노출 ${effExp}x${boostTag}`;
     const parts = [];
-    if (tc.spyWeight > 0)   parts.push(`SPY ${(tc.spyWeight*100).toFixed(0)}%`);
-    if (tc.spxlWeight > 0)  parts.push(`SPXL ${(tc.spxlWeight*100).toFixed(0)}% (3x)`);
-    if (tc.qqqWeight > 0)   parts.push(`QQQ ${(tc.qqqWeight*100).toFixed(0)}%`);
-    if (tc.cashWeight > 0)  parts.push(`현금/BIL ${(tc.cashWeight*100).toFixed(0)}%`);
+    if (blended) {
+      const lev = t => (t === 'SPXL' || t === 'TQQQ') ? ' (3x)' : '';
+      Object.entries(pf.weights || {})
+        .sort((a, b) => b[1] - a[1])
+        .forEach(([t, w]) => { if (w > 0.001) parts.push(`${t} ${(w*100).toFixed(0)}%${lev(t)}`); });
+      if (pf.cashWeight > 0.001) parts.push(`현금/BIL ${(pf.cashWeight*100).toFixed(0)}%`);
+    } else {
+      if (tc.spyWeight > 0)   parts.push(`SPY ${(tc.spyWeight*100).toFixed(0)}%`);
+      if (tc.spxlWeight > 0)  parts.push(`SPXL ${(tc.spxlWeight*100).toFixed(0)}% (3x)`);
+      if (tc.qqqWeight > 0)   parts.push(`QQQ ${(tc.qqqWeight*100).toFixed(0)}%`);
+      if (tc.cashWeight > 0)  parts.push(`현금/BIL ${(tc.cashWeight*100).toFixed(0)}%`);
+    }
     let alloc = parts.length ? parts.join(' + ') : '현금 100%';
     document.getElementById('trendcore-panel').innerHTML = `
       <div class="gates-panel" style="border-left:4px solid var(--green)">
@@ -166,7 +179,7 @@
           ⓘ <strong>추세 손절선</strong> = 다음 평일 종가가 이 값보다 낮으면 해당 슬리브 청산(현금화). 추세필터: ${tc.trendFilter || '—'}. SPY $${tc.price} (200일선 ${tc.distPct>=0?'+':''}${tc.distPct}%).
         </div>
         <div style="font-size:11px;color:var(--muted);margin-top:8px;border-top:1px solid #14181f;padding-top:8px">
-          백테스트(SPY+QQQ 50/50, 실제 SPXL decay, VIX≥22 골든크로스, 캄-불 레버 부스트, IRX 현금수익, 비용 0.25% 차감): Full OOS 2021+ +131%/Sharpe 1.17/MDD −14%, Holdout 2024+ +72%/1.46/−11%. 매해 baseline 상회, 2022 약세장 불변(−9%).
+          백테스트(SPY+QQQ 50/50, 실제 SPXL decay, VIX≥22 골든크로스, 캄-불 레버 부스트, RSI 섹터 슬리브 25%, IRX 현금수익, 비용 0.25% 차감, look-ahead-safe): 추세코어 단독 Full OOS 2021+ +114%/Sharpe 1.12/MDD −14% · Holdout 2024+ +59%/1.43/−11%. <strong>+섹터 블렌드(주력): Full +131%/1.30/−13% · Holdout +60%/1.56/−13%</strong> — 위험대비(Sharpe) +0.13 개선, 낙폭 동등. 2022 약세장 −7.6%(코어 −9.3%·SPY −18%).
         </div>
       </div>`;
   }

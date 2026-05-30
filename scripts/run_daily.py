@@ -544,6 +544,23 @@ async def main() -> None:
                 log.info("Trend-core: regime=%s exposure=%.2fx (SPY %.0f%% / SPXL %.0f%%)",
                          tc.get("regime"), tc.get("effExposure", 0),
                          tc.get("spyWeight", 0) * 100, tc.get("spxlWeight", 0) * 100)
+
+                # ── Composed portfolio: trend-core engine + RSI sector sleeve ──
+                # The single actionable allocation the user executes. The sleeve
+                # (regime["sectorSatellite"], set in the conviction block) adds the
+                # one validated cross-sectional edge the engine lacks. Weight is
+                # config.SECTOR_SLEEVE_WEIGHT (default 25%); falls back to the pure
+                # engine when the sleeve is unavailable.
+                try:
+                    from signals.portfolio import compose as _compose
+                    regime["portfolio"] = _compose(tc, regime.get("sectorSatellite"))
+                    pf = regime["portfolio"]
+                    log.info("Portfolio(blend): eff=%.2fx core=%.0f%% sleeve=%.0f%% -> %s",
+                             pf.get("effExposure", 0), pf.get("coreWeight", 1) * 100,
+                             pf.get("sleeveWeight", 0) * 100 if pf.get("enabled") else 0,
+                             pf.get("weights"))
+                except Exception as exc:
+                    log.warning("Portfolio compose failed (non-fatal): %s", exc)
         except Exception as exc:
             log.warning("Fear-dip/trend-core eval failed (non-fatal): %s", exc, exc_info=True)
 

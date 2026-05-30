@@ -281,8 +281,8 @@ const REPORT = {
       {
         "ticker": "XLE",
         "name": "Energy Select",
-        "confidence": 0.6129,
-        "calWin": 0.5704,
+        "confidence": 0.6072,
+        "calWin": 0.5701,
         "rs": -0.0166,
         "rsi": 52.6,
         "above50": false,
@@ -291,7 +291,7 @@ const REPORT = {
         "hi": 58.51,
         "lo": 54.07,
         "bandPct": 0.0394,
-        "estEv": 0.00305,
+        "estEv": 0.00303,
         "passed": false
       },
       {
@@ -431,8 +431,8 @@ const REPORT = {
     },
     "fearDip": {
       "isEntry": false,
-      "score": 0.20663298700008242,
-      "threshold": 0.4341054356247875,
+      "score": 0.20663238542567036,
+      "threshold": 0.4340998746336422,
       "percentile": 0.6098,
       "entry": 756.47998046875,
       "paper": {
@@ -473,6 +473,26 @@ const REPORT = {
         },
         "tiltDaysLeft": 5
       }
+    },
+    "portfolio": {
+      "weights": {
+        "SPY": 0.315,
+        "QQQ": 0.375,
+        "SPXL": 0.0525,
+        "XLK": 0.125,
+        "XLV": 0.125
+      },
+      "cashWeight": 0.0075,
+      "effExposure": 1.1,
+      "coreWeight": 0.75,
+      "sleeveWeight": 0.25,
+      "sleeveInvested": 0.25,
+      "pick": [
+        "XLK",
+        "XLV"
+      ],
+      "enabled": true,
+      "note": "추세코어 75% + RSI 섹터 슬리브 25% (XLK + XLV)"
     },
     "ensemble": {
       "action": "none",
@@ -522,12 +542,25 @@ const REPORT = {
   if (tc && tc.coreOn != null) {
     const regimeCls = tc.regime === 'cash' ? 'fail' : (tc.regime.includes('panic') ? 'wait' : 'pass');
     const boostTag = tc.calmBoost ? ' ⚡캄-불 부스트' : '';
-    const expBadge = `노출 ${tc.effExposure}x${boostTag}`;
+    // Composed portfolio (engine + RSI sector sleeve) is the actionable headline
+    // when enabled; otherwise fall back to the pure engine weights.
+    const pf = REPORT.regime.portfolio;
+    const blended = !!(pf && pf.enabled);
+    const effExp = blended ? pf.effExposure : tc.effExposure;
+    const expBadge = `노출 ${effExp}x${boostTag}`;
     const parts = [];
-    if (tc.spyWeight > 0)   parts.push(`SPY ${(tc.spyWeight*100).toFixed(0)}%`);
-    if (tc.spxlWeight > 0)  parts.push(`SPXL ${(tc.spxlWeight*100).toFixed(0)}% (3x)`);
-    if (tc.qqqWeight > 0)   parts.push(`QQQ ${(tc.qqqWeight*100).toFixed(0)}%`);
-    if (tc.cashWeight > 0)  parts.push(`현금/BIL ${(tc.cashWeight*100).toFixed(0)}%`);
+    if (blended) {
+      const lev = t => (t === 'SPXL' || t === 'TQQQ') ? ' (3x)' : '';
+      Object.entries(pf.weights || {})
+        .sort((a, b) => b[1] - a[1])
+        .forEach(([t, w]) => { if (w > 0.001) parts.push(`${t} ${(w*100).toFixed(0)}%${lev(t)}`); });
+      if (pf.cashWeight > 0.001) parts.push(`현금/BIL ${(pf.cashWeight*100).toFixed(0)}%`);
+    } else {
+      if (tc.spyWeight > 0)   parts.push(`SPY ${(tc.spyWeight*100).toFixed(0)}%`);
+      if (tc.spxlWeight > 0)  parts.push(`SPXL ${(tc.spxlWeight*100).toFixed(0)}% (3x)`);
+      if (tc.qqqWeight > 0)   parts.push(`QQQ ${(tc.qqqWeight*100).toFixed(0)}%`);
+      if (tc.cashWeight > 0)  parts.push(`현금/BIL ${(tc.cashWeight*100).toFixed(0)}%`);
+    }
     let alloc = parts.length ? parts.join(' + ') : '현금 100%';
     document.getElementById('trendcore-panel').innerHTML = `
       <div class="gates-panel" style="border-left:4px solid var(--green)">
@@ -548,7 +581,7 @@ const REPORT = {
           ⓘ <strong>추세 손절선</strong> = 다음 평일 종가가 이 값보다 낮으면 해당 슬리브 청산(현금화). 추세필터: ${tc.trendFilter || '—'}. SPY $${tc.price} (200일선 ${tc.distPct>=0?'+':''}${tc.distPct}%).
         </div>
         <div style="font-size:11px;color:var(--muted);margin-top:8px;border-top:1px solid #14181f;padding-top:8px">
-          백테스트(SPY+QQQ 50/50, 실제 SPXL decay, VIX≥22 골든크로스, 캄-불 레버 부스트, IRX 현금수익, 비용 0.25% 차감): Full OOS 2021+ +131%/Sharpe 1.17/MDD −14%, Holdout 2024+ +72%/1.46/−11%. 매해 baseline 상회, 2022 약세장 불변(−9%).
+          백테스트(SPY+QQQ 50/50, 실제 SPXL decay, VIX≥22 골든크로스, 캄-불 레버 부스트, RSI 섹터 슬리브 25%, IRX 현금수익, 비용 0.25% 차감, look-ahead-safe): 추세코어 단독 Full OOS 2021+ +114%/Sharpe 1.12/MDD −14% · Holdout 2024+ +59%/1.43/−11%. <strong>+섹터 블렌드(주력): Full +131%/1.30/−13% · Holdout +60%/1.56/−13%</strong> — 위험대비(Sharpe) +0.13 개선, 낙폭 동등. 2022 약세장 −7.6%(코어 −9.3%·SPY −18%).
         </div>
       </div>`;
   }
