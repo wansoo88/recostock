@@ -4,7 +4,13 @@ import pandas as pd
 
 from signals.trend_core import (evaluate, effective_exposure, TILT_SPXL_WEIGHT,
                                  SPY_SLEEVE_WEIGHT, QQQ_SLEEVE_WEIGHT,
-                                 VIX_REGIME_THRESHOLD, ALWAYS_ON_SPXL)
+                                 VIX_REGIME_THRESHOLD, ALWAYS_ON_SPXL,
+                                 STRONG_SPXL, CALM_VIX_MAX)
+
+
+# VIX above the calm threshold so the always-on (non-boost) path is exercised.
+_VIX_CALM = CALM_VIX_MAX - 2
+_VIX_NORMAL = CALM_VIX_MAX + 2
 
 
 def _close(spy_trend="up", qqq_trend="up", n=260):
@@ -18,16 +24,35 @@ def _close(spy_trend="up", qqq_trend="up", n=260):
 
 
 def test_dual_uptrend_no_fear():
-    r = evaluate(_close("up", "up"), fear_dip_active=False, vix_latest=15.0)
-    # Baseline always-on SPXL while trend is on (no panic).
+    # VIX above calm threshold → baseline always-on SPXL, no boost.
+    r = evaluate(_close("up", "up"), fear_dip_active=False, vix_latest=_VIX_NORMAL)
     assert r["spyWeight"] == round(SPY_SLEEVE_WEIGHT * (1 - ALWAYS_ON_SPXL), 2)
     assert r["spxlWeight"] == round(SPY_SLEEVE_WEIGHT * ALWAYS_ON_SPXL, 2)
     assert r["qqqWeight"] == QQQ_SLEEVE_WEIGHT
+    assert r["calmBoost"] is False
     assert r["regime"] == "dual_uptrend"
 
 
+def test_dual_uptrend_calm_boost():
+    # Both sleeves up AND VIX below calm threshold → SPXL rises to STRONG_SPXL.
+    r = evaluate(_close("up", "up"), fear_dip_active=False, vix_latest=_VIX_CALM)
+    assert r["calmBoost"] is True
+    assert r["spxlWeight"] == round(SPY_SLEEVE_WEIGHT * STRONG_SPXL, 2)
+    assert r["spyWeight"] == round(SPY_SLEEVE_WEIGHT * (1 - STRONG_SPXL), 2)
+    assert r["qqqWeight"] == QQQ_SLEEVE_WEIGHT
+    assert r["regime"] == "dual_uptrend_boost"
+
+
+def test_calm_boost_requires_both_sleeves_up():
+    # SPY up but QQQ down at low VIX → not a calm bull → no boost (defense intact).
+    r = evaluate(_close("up", "down"), fear_dip_active=False, vix_latest=_VIX_CALM)
+    assert r["calmBoost"] is False
+    assert r["spxlWeight"] == round(SPY_SLEEVE_WEIGHT * ALWAYS_ON_SPXL, 2)
+
+
 def test_dual_uptrend_with_fear_tilts_spy_sleeve_only():
-    r = evaluate(_close("up", "up"), fear_dip_active=True, vix_latest=15.0)
+    # Fear-dip takes precedence over the calm boost even at low VIX.
+    r = evaluate(_close("up", "up"), fear_dip_active=True, vix_latest=_VIX_CALM)
     expected_spxl = round(SPY_SLEEVE_WEIGHT * TILT_SPXL_WEIGHT, 2)
     expected_spy = round(SPY_SLEEVE_WEIGHT * (1 - TILT_SPXL_WEIGHT), 2)
     assert r["spxlWeight"] == expected_spxl
@@ -37,8 +62,8 @@ def test_dual_uptrend_with_fear_tilts_spy_sleeve_only():
 
 
 def test_spy_only_uptrend():
-    r = evaluate(_close("up", "down"), fear_dip_active=False, vix_latest=15.0)
-    # Baseline always-on SPXL while SPY trend is on.
+    r = evaluate(_close("up", "down"), fear_dip_active=False, vix_latest=_VIX_NORMAL)
+    # Baseline always-on SPXL while SPY trend is on (QQQ down → no boost).
     assert r["spyWeight"] == round(SPY_SLEEVE_WEIGHT * (1 - ALWAYS_ON_SPXL), 2)
     assert r["spxlWeight"] == round(SPY_SLEEVE_WEIGHT * ALWAYS_ON_SPXL, 2)
     assert r["qqqWeight"] == 0.0
