@@ -91,6 +91,7 @@
 
 <h1>📊 ETF 시그널 리포트</h1>
 <div class="date" id="rpt-date"></div>
+<div id="freshness-banner"></div>
 
 <div id="trendcore-panel"></div>
 <div id="ensemble-panel"></div>
@@ -131,6 +132,27 @@
   }
 
   document.getElementById('rpt-date').textContent = REPORT.date;
+
+  // Data freshness — the report is stamped with today's calendar date, but the
+  // signals are computed from the latest available close. Surface the data
+  // as-of date always, and a loud warning if the data is stale (e.g. a yfinance
+  // outage), so the user never trades on silently-frozen prices.
+  (function () {
+    const reg = REPORT.regime || {};
+    const asOf = reg.dataAsOf;
+    const el = document.getElementById('freshness-banner');
+    if (!el || !asOf) return;
+    if (reg.stale) {
+      el.innerHTML = `<div style="background:rgba(252,129,129,0.15);border:1px solid var(--red);
+        border-radius:8px;padding:10px 14px;margin-bottom:14px;color:var(--red);font-size:13px;font-weight:600">
+        ⚠️ 데이터 지연 경고 — 최신 종가가 <strong>${asOf}</strong> 기준으로 ${reg.staleDays}일 전입니다.
+        데이터 갱신이 멈췄을 수 있으니 <u>오늘 시그널을 신뢰하지 말고</u> 파이프라인/yfinance를 확인하세요.</div>`;
+    } else {
+      el.innerHTML = `<div style="color:var(--muted);font-size:12px;margin-bottom:10px">
+        데이터 기준일: <strong style="color:var(--text)">${asOf}</strong>${reg.staleDays > 0 ? ` (${reg.staleDays}일 전 · 정상 범위)` : ' (당일)'}</div>`;
+    }
+  })();
+
   document.getElementById('rpt-regime').textContent = REPORT.regime.label || '—';
   document.getElementById('rpt-exposure').textContent =
     typeof REPORT.regime.exposure === 'number' ? REPORT.regime.exposure.toFixed(2) + '×' : '—';

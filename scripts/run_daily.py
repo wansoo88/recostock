@@ -160,6 +160,28 @@ async def main() -> None:
             )
             vix_df = pd.read_parquet(vix_path) if vix_path.exists() else None
 
+            # ── Stale-data guard ──────────────────────────────────────────────
+            # The pipeline publishes signals stamped with TODAY's calendar date.
+            # If yfinance silently returns stale prices (API outage, the
+            # SPXL-disappearance-type incident), the user would manually trade on
+            # old data with no warning. Compare the data's latest close to today
+            # and surface the gap. Normal Fri->Mon lag is 3 calendar days, so a
+            # gap > STALE_MAX_DAYS means a real freshness problem.
+            try:
+                from data.collector import data_freshness
+                _last_close = close_df.dropna(how="all").index[-1]
+                _fresh = data_freshness(_last_close, today)
+                regime.update(_fresh)
+                if _fresh["stale"]:
+                    log.error("STALE DATA: latest close %s is %d days before today %s "
+                              "— signals may be based on outdated prices",
+                              _fresh["dataAsOf"], _fresh["staleDays"], today)
+                else:
+                    log.info("Data freshness OK: latest close %s (%d days old)",
+                             _fresh["dataAsOf"], _fresh["staleDays"])
+            except Exception as exc:
+                log.warning("Stale-data check failed (non-fatal): %s", exc)
+
             # ── Regime detection: VIX + macro overlay ────────────────────────
             if vix_df is not None and not vix_df.empty:
                 vix_latest = float(vix_df.iloc[:, 0].dropna().iloc[-1])

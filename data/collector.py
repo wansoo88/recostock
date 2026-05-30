@@ -99,6 +99,23 @@ def fetch_macro(fred_api_key: str) -> dict[str, pd.Series]:
     return result
 
 
+def data_freshness(last_close, today, max_days: int = 4) -> dict:
+    """Compare the data's latest close date to today and flag staleness.
+
+    The daily report is stamped with today's calendar date, but signals are
+    computed from the latest available close. If the data silently freezes
+    (yfinance outage, etc.), the user could trade on stale prices. Normal
+    Friday→Monday lag is 3 calendar days, so a gap > max_days (default 4) means
+    a real freshness problem.
+
+    Returns {dataAsOf, staleDays, stale}. Pure — no I/O.
+    """
+    last = pd.Timestamp(last_close).normalize()
+    days = int((pd.Timestamp(today).normalize() - last).days)
+    return {"dataAsOf": last.date().isoformat(), "staleDays": days,
+            "stale": bool(days > max_days)}
+
+
 def save_parquet(df: pd.DataFrame | pd.Series, name: str) -> Path:
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     path = RAW_DIR / f"{name}.parquet"

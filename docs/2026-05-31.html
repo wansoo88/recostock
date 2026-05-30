@@ -91,6 +91,7 @@
 
 <h1>📊 ETF 시그널 리포트</h1>
 <div class="date" id="rpt-date"></div>
+<div id="freshness-banner"></div>
 
 <div id="trendcore-panel"></div>
 <div id="ensemble-panel"></div>
@@ -186,8 +187,8 @@ const REPORT = {
       {
         "ticker": "XLK",
         "name": "Technology Select",
-        "confidence": 0.4656,
-        "calWin": 0.5551,
+        "confidence": 0.4309,
+        "calWin": 0.5539,
         "rs": 0.2894,
         "rsi": 72.3,
         "above50": true,
@@ -196,14 +197,14 @@ const REPORT = {
         "hi": 197.35,
         "lo": 184.69,
         "bandPct": 0.0332,
-        "estEv": 0.00115,
+        "estEv": 0.00108,
         "passed": false
       },
       {
         "ticker": "DIA",
         "name": "SPDR Dow Jones",
-        "confidence": 0.5451,
-        "calWin": 0.5628,
+        "confidence": 0.5016,
+        "calWin": 0.5579,
         "rs": 0.0461,
         "rsi": 71.6,
         "above50": true,
@@ -212,14 +213,14 @@ const REPORT = {
         "hi": 518.4,
         "lo": 503.16,
         "bandPct": 0.0149,
-        "estEv": -0.00063,
+        "estEv": -0.00077,
         "passed": false
       },
       {
         "ticker": "SPY",
         "name": "SPDR S&P 500",
-        "confidence": 0.5159,
-        "calWin": 0.5595,
+        "confidence": 0.4857,
+        "calWin": 0.5566,
         "rs": 0.0844,
         "rsi": 68.8,
         "above50": true,
@@ -228,14 +229,14 @@ const REPORT = {
         "hi": 766.88,
         "lo": 746.08,
         "bandPct": 0.0137,
-        "estEv": -0.00086,
+        "estEv": -0.00094,
         "passed": false
       },
       {
         "ticker": "XLV",
         "name": "Health Care Select",
-        "confidence": 0.5185,
-        "calWin": 0.5598,
+        "confidence": 0.5332,
+        "calWin": 0.5614,
         "rs": -0.0084,
         "rsi": 68.6,
         "above50": true,
@@ -244,14 +245,14 @@ const REPORT = {
         "hi": 152.3,
         "lo": 146.64,
         "bandPct": 0.0189,
-        "estEv": -0.00024,
+        "estEv": -0.00018,
         "passed": false
       },
       {
         "ticker": "QQQ",
         "name": "Invesco QQQ",
-        "confidence": 0.5169,
-        "calWin": 0.5596,
+        "confidence": 0.4777,
+        "calWin": 0.556,
         "rs": 0.1666,
         "rsi": 67.5,
         "above50": true,
@@ -260,14 +261,14 @@ const REPORT = {
         "hi": 755.05,
         "lo": 721.57,
         "bandPct": 0.0227,
-        "estEv": 0.0002,
+        "estEv": 4e-05,
         "passed": false
       },
       {
         "ticker": "XLF",
         "name": "Financial Select",
-        "confidence": 0.6099,
-        "calWin": 0.5703,
+        "confidence": 0.5824,
+        "calWin": 0.5674,
         "rs": 0.0008,
         "rsi": 53.7,
         "above50": true,
@@ -276,14 +277,14 @@ const REPORT = {
         "hi": 52.4,
         "lo": 50.76,
         "bandPct": 0.0158,
-        "estEv": -0.00027,
+        "estEv": -0.00037,
         "passed": false
       },
       {
         "ticker": "XLE",
         "name": "Energy Select",
-        "confidence": 0.5936,
-        "calWin": 0.5689,
+        "confidence": 0.6145,
+        "calWin": 0.5705,
         "rs": -0.0166,
         "rsi": 52.6,
         "above50": false,
@@ -292,14 +293,14 @@ const REPORT = {
         "hi": 58.51,
         "lo": 54.07,
         "bandPct": 0.0394,
-        "estEv": 0.00293,
+        "estEv": 0.00306,
         "passed": false
       },
       {
         "ticker": "XLY",
         "name": "Consumer Disc Select",
-        "confidence": 0.5376,
-        "calWin": 0.5619,
+        "confidence": 0.5336,
+        "calWin": 0.5615,
         "rs": 0.0354,
         "rsi": 52.4,
         "above50": true,
@@ -308,14 +309,14 @@ const REPORT = {
         "hi": 123.65,
         "lo": 118.09,
         "bandPct": 0.023,
-        "estEv": 0.00035,
+        "estEv": 0.00033,
         "passed": false
       },
       {
         "ticker": "XLI",
         "name": "Industrial Select",
-        "confidence": 0.6099,
-        "calWin": 0.5703,
+        "confidence": 0.5869,
+        "calWin": 0.568,
         "rs": -0.0005,
         "rsi": 49.8,
         "above50": true,
@@ -324,7 +325,7 @@ const REPORT = {
         "hi": 177.4,
         "lo": 168.86,
         "bandPct": 0.0247,
-        "estEv": 0.00097,
+        "estEv": 0.00086,
         "passed": false
       }
     ],
@@ -432,8 +433,8 @@ const REPORT = {
     },
     "fearDip": {
       "isEntry": false,
-      "score": 0.20663277116667852,
-      "threshold": 0.435115433552449,
+      "score": 0.20663270638413336,
+      "threshold": 0.435118041193211,
       "percentile": 0.6104,
       "entry": 756.47998046875,
       "paper": {
@@ -550,6 +551,27 @@ const REPORT = {
   }
 
   document.getElementById('rpt-date').textContent = REPORT.date;
+
+  // Data freshness — the report is stamped with today's calendar date, but the
+  // signals are computed from the latest available close. Surface the data
+  // as-of date always, and a loud warning if the data is stale (e.g. a yfinance
+  // outage), so the user never trades on silently-frozen prices.
+  (function () {
+    const reg = REPORT.regime || {};
+    const asOf = reg.dataAsOf;
+    const el = document.getElementById('freshness-banner');
+    if (!el || !asOf) return;
+    if (reg.stale) {
+      el.innerHTML = `<div style="background:rgba(252,129,129,0.15);border:1px solid var(--red);
+        border-radius:8px;padding:10px 14px;margin-bottom:14px;color:var(--red);font-size:13px;font-weight:600">
+        ⚠️ 데이터 지연 경고 — 최신 종가가 <strong>${asOf}</strong> 기준으로 ${reg.staleDays}일 전입니다.
+        데이터 갱신이 멈췄을 수 있으니 <u>오늘 시그널을 신뢰하지 말고</u> 파이프라인/yfinance를 확인하세요.</div>`;
+    } else {
+      el.innerHTML = `<div style="color:var(--muted);font-size:12px;margin-bottom:10px">
+        데이터 기준일: <strong style="color:var(--text)">${asOf}</strong>${reg.staleDays > 0 ? ` (${reg.staleDays}일 전 · 정상 범위)` : ' (당일)'}</div>`;
+    }
+  })();
+
   document.getElementById('rpt-regime').textContent = REPORT.regime.label || '—';
   document.getElementById('rpt-exposure').textContent =
     typeof REPORT.regime.exposure === 'number' ? REPORT.regime.exposure.toFixed(2) + '×' : '—';

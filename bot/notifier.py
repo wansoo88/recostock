@@ -40,6 +40,14 @@ async def send_daily_signal(
         f"레짐: {regime.get('label', 'N/A')} / 노출도 {regime.get('exposure', 1.0):.2f}× "
         f"/ 시그널 {len(signals)}개 / 종합 기대값 {exp_str}",
     ]
+    # Stale-data warning — lead with it so the user can't miss frozen prices.
+    if regime.get("stale"):
+        lines.insert(1, f"⚠️ 데이터 지연: 최신 종가 {regime.get('dataAsOf')} "
+                        f"({regime.get('staleDays')}일 전) — 시그널 신뢰 말고 파이프라인 확인")
+    # Stale-data warning — lead with it so the user can't miss frozen prices.
+    if regime.get("stale"):
+        lines.insert(1, f"⚠️ 데이터 지연: 최신 종가 {regime.get('dataAsOf')} "
+                        f"({regime.get('staleDays')}일 전) — 시그널 신뢰 말고 파이프라인 확인")
     if longs:
         lines.append(f"🟢 LONG: {', '.join(longs)}")
     if inverses:
