@@ -90,6 +90,16 @@ async def send_daily_signal(
 
     # Fear-dip experimental signal (paper-only). Surface the entry on a signal
     # day AND the accumulating paper track so the user sees it build over time.
+    # Portfolio NAV paper validation (3-month Tier-2 track) — reporting only.
+    pp = regime.get("portfolioPaper") or {}
+    if pp.get("nDays", 0) > 0:
+        gap_s = f"{pp['gap']*100:.0f}%" if pp.get("gap") is not None else "n/a"
+        lines.append(
+            f"🧪 3개월 페이퍼 검증(주력 블렌드): {pp['nDays']}일/{pp['months']:.1f}개월 · "
+            f"NAV {pp['totalReturn']*100:+.1f}% · 실현Sharpe {pp['annSharpe']:.2f}"
+            f"(목표 {pp['targetSharpe']:.2f}, 괴리 {gap_s}) · {pp['status']}"
+        )
+
     fd = regime.get("fearDip")
     if fd:
         if fd.get("isEntry"):

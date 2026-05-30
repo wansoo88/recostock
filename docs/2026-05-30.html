@@ -106,6 +106,7 @@
 <div id="gates-panel"></div>
 <div id="candidates-panel"></div>
 <div id="satellite-panel"></div>
+<div id="portfolio-paper-panel"></div>
 <div id="feardip-panel"></div>
 
 <div id="core-section"></div>
@@ -139,7 +140,7 @@ const REPORT = {
       {
         "name": "SPY 추세",
         "value": 756.47998046875,
-        "threshold": 678.6764251708985,
+        "threshold": 678.6764245605468,
         "op": ">",
         "passed": true,
         "format": ".2f",
@@ -185,8 +186,8 @@ const REPORT = {
       {
         "ticker": "XLK",
         "name": "Technology Select",
-        "confidence": 0.4528,
-        "calWin": 0.5541,
+        "confidence": 0.4453,
+        "calWin": 0.5539,
         "rs": 0.2894,
         "rsi": 72.3,
         "above50": true,
@@ -195,14 +196,14 @@ const REPORT = {
         "hi": 197.35,
         "lo": 184.69,
         "bandPct": 0.0332,
-        "estEv": 0.00109,
+        "estEv": 0.00108,
         "passed": false
       },
       {
         "ticker": "DIA",
         "name": "SPDR Dow Jones",
-        "confidence": 0.5271,
-        "calWin": 0.5607,
+        "confidence": 0.5356,
+        "calWin": 0.5617,
         "rs": 0.0461,
         "rsi": 71.6,
         "above50": true,
@@ -211,14 +212,14 @@ const REPORT = {
         "hi": 518.4,
         "lo": 503.16,
         "bandPct": 0.0149,
-        "estEv": -0.00069,
+        "estEv": -0.00066,
         "passed": false
       },
       {
         "ticker": "SPY",
         "name": "SPDR S&P 500",
-        "confidence": 0.5082,
-        "calWin": 0.5586,
+        "confidence": 0.5097,
+        "calWin": 0.5588,
         "rs": 0.0844,
         "rsi": 68.8,
         "above50": true,
@@ -227,14 +228,14 @@ const REPORT = {
         "hi": 766.88,
         "lo": 746.08,
         "bandPct": 0.0137,
-        "estEv": -0.00089,
+        "estEv": -0.00088,
         "passed": false
       },
       {
         "ticker": "XLV",
         "name": "Health Care Select",
-        "confidence": 0.535,
-        "calWin": 0.5616,
+        "confidence": 0.5527,
+        "calWin": 0.5636,
         "rs": -0.0084,
         "rsi": 68.6,
         "above50": true,
@@ -243,13 +244,13 @@ const REPORT = {
         "hi": 152.3,
         "lo": 146.64,
         "bandPct": 0.0189,
-        "estEv": -0.00017,
+        "estEv": -9e-05,
         "passed": false
       },
       {
         "ticker": "QQQ",
         "name": "Invesco QQQ",
-        "confidence": 0.5078,
+        "confidence": 0.5082,
         "calWin": 0.5586,
         "rs": 0.1666,
         "rsi": 67.5,
@@ -265,8 +266,8 @@ const REPORT = {
       {
         "ticker": "XLF",
         "name": "Financial Select",
-        "confidence": 0.5933,
-        "calWin": 0.5688,
+        "confidence": 0.5897,
+        "calWin": 0.5684,
         "rs": 0.0008,
         "rsi": 53.7,
         "above50": true,
@@ -275,14 +276,14 @@ const REPORT = {
         "hi": 52.4,
         "lo": 50.76,
         "bandPct": 0.0158,
-        "estEv": -0.00032,
+        "estEv": -0.00034,
         "passed": false
       },
       {
         "ticker": "XLE",
         "name": "Energy Select",
-        "confidence": 0.6129,
-        "calWin": 0.5704,
+        "confidence": 0.6097,
+        "calWin": 0.5702,
         "rs": -0.0166,
         "rsi": 52.6,
         "above50": false,
@@ -291,14 +292,14 @@ const REPORT = {
         "hi": 58.51,
         "lo": 54.07,
         "bandPct": 0.0394,
-        "estEv": 0.00305,
+        "estEv": 0.00304,
         "passed": false
       },
       {
         "ticker": "XLY",
         "name": "Consumer Disc Select",
-        "confidence": 0.5392,
-        "calWin": 0.5621,
+        "confidence": 0.5556,
+        "calWin": 0.564,
         "rs": 0.0354,
         "rsi": 52.4,
         "above50": true,
@@ -307,14 +308,14 @@ const REPORT = {
         "hi": 123.65,
         "lo": 118.09,
         "bandPct": 0.023,
-        "estEv": 0.00035,
+        "estEv": 0.00044,
         "passed": false
       },
       {
         "ticker": "XLI",
         "name": "Industrial Select",
-        "confidence": 0.6016,
-        "calWin": 0.5698,
+        "confidence": 0.6139,
+        "calWin": 0.5705,
         "rs": -0.0005,
         "rsi": 49.8,
         "above50": true,
@@ -323,7 +324,7 @@ const REPORT = {
         "hi": 177.4,
         "lo": 168.86,
         "bandPct": 0.0247,
-        "estEv": 0.00095,
+        "estEv": 0.00098,
         "passed": false
       }
     ],
@@ -431,8 +432,8 @@ const REPORT = {
     },
     "fearDip": {
       "isEntry": false,
-      "score": 0.20663259991840488,
-      "threshold": 0.4341013843448121,
+      "score": 0.20663283445568367,
+      "threshold": 0.4341002645128716,
       "percentile": 0.6098,
       "entry": 756.47998046875,
       "paper": {
@@ -493,6 +494,23 @@ const REPORT = {
       ],
       "enabled": true,
       "note": "추세코어 85% + RSI 섹터 슬리브 15% (XLK + XLV)"
+    },
+    "portfolioPaper": {
+      "nDays": 1,
+      "months": 0.0,
+      "totalReturn": 0.0,
+      "annReturn": 0.0,
+      "annSharpe": 0.0,
+      "mdd": 0.0,
+      "start": "2026-05-29",
+      "last": "2026-05-29",
+      "targetSharpe": 1.23,
+      "gap": 1.0,
+      "monthsOk": false,
+      "sharpeOk": false,
+      "driftOk": false,
+      "passed": false,
+      "status": "warming up"
     },
     "ensemble": {
       "action": "none",
@@ -784,6 +802,47 @@ const REPORT = {
           <strong>백테스트(0.25% 비용):</strong> 단독 Full 2021+ +${bt.standaloneFull?.ret || 177}%/Sharpe ${bt.standaloneFull?.sharpe || 1.35}.
           코어 엔진에 ${wpct}% 섞으면 Full +${bt.blendFull?.ret || 124}%/Sharpe ${bt.blendFull?.sharpe || 1.23} (엔진 단독 +${bt.engineFull?.ret || 114}%/${bt.engineFull?.sharpe || 1.12}${(bt.blendFull && bt.engineFull) ? ` → Sharpe +${(bt.blendFull.sharpe - bt.engineFull.sharpe).toFixed(2)}` : ''}), Holdout +${bt.blendHoldout?.ret || 59}%/${bt.blendHoldout?.sharpe || 1.51}.<br>
           <strong>약점(정직):</strong> 저변동 횡보장(2023·2025)엔 코어에 소폭 뒤지고 단독 MDD −22%. 그래서 <u>코어가 아닌 선택적 레이어</u> — 추세코어 자본의 ~${wpct}%까지가 권장.
+        </div>
+      </div>`;
+  }
+
+  // 3-month paper validation of the composed blend (forward out-of-sample).
+  // NAV-based: tracks realized return of holding the recommended daily allocation,
+  // checked against the backtest Sharpe (Tier-2 drift gate) after 3 months.
+  const pp = REPORT.regime.portfolioPaper;
+  if (pp && pp.nDays > 0) {
+    const pct = v => (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+    const monthsBar = Math.min(100, (pp.months / 3) * 100).toFixed(0);
+    const chip = (ok, label) => `<span style="color:${ok ? 'var(--green)' : 'var(--muted)'}">${ok ? '✓' : '○'} ${label}</span>`;
+    const statusColor = pp.status === 'PASS' ? 'var(--green)'
+      : (pp.status === 'review' ? 'var(--amber)' : 'var(--muted)');
+    const navColor = pp.totalReturn >= 0 ? 'var(--green)' : 'var(--red)';
+    document.getElementById('portfolio-paper-panel').innerHTML = `
+      <div class="cand-panel" style="border:1px dashed var(--amber)">
+        <div class="ttl">🧪 3개월 페이퍼 검증 — 주력 블렌드 (NAV 추적 · 실자본 아님)</div>
+        <div style="font-size:13px;margin-bottom:8px">
+          진행 <strong>${pp.nDays}일 / ${pp.months.toFixed(1)}개월</strong>
+          (게이트 3개월) · 상태 <strong style="color:${statusColor}">${pp.status}</strong>
+          <div style="background:#14181f;border-radius:6px;height:6px;margin-top:6px">
+            <div style="background:var(--amber);height:6px;border-radius:6px;width:${monthsBar}%"></div>
+          </div>
+        </div>
+        <table class="cand-table">
+          <thead><tr><th>누적(NAV)</th><th>연환산</th><th>실현 Sharpe</th><th>목표 Sharpe</th><th>MDD</th></tr></thead>
+          <tbody><tr>
+            <td style="color:${navColor}">${pct(pp.totalReturn)}</td>
+            <td>${pct(pp.annReturn)}</td>
+            <td><strong>${pp.annSharpe.toFixed(2)}</strong></td>
+            <td style="color:var(--muted)">${pp.targetSharpe.toFixed(2)}</td>
+            <td style="color:var(--red)">${pct(pp.mdd)}</td>
+          </tr></tbody>
+        </table>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">
+          Tier-2 게이트: ${chip(pp.monthsOk, '3개월+')} · ${chip(pp.sharpeOk, 'Sharpe≥0.5')} ·
+          ${chip(pp.driftOk, `백테스트 괴리<40%${pp.gap != null ? ` (현재 ${(pp.gap * 100).toFixed(0)}%)` : ''}`)}<br>
+          매일의 권장 배분을 그대로 보유했을 때의 실현 성과를 ${pp.start || '시작일'}부터 전향적으로 추적합니다(백필 없음).
+          3개월 누적 후 실현 Sharpe가 백테스트(${pp.targetSharpe.toFixed(2)})와 40% 이내로 수렴하면 실자본 검토 대상이 됩니다.
+          짧은 표본의 Sharpe는 노이즈가 크므로 단기 수치는 참고용입니다.
         </div>
       </div>`;
   }

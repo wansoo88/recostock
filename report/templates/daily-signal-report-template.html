@@ -106,6 +106,7 @@
 <div id="gates-panel"></div>
 <div id="candidates-panel"></div>
 <div id="satellite-panel"></div>
+<div id="portfolio-paper-panel"></div>
 <div id="feardip-panel"></div>
 
 <div id="core-section"></div>
@@ -382,6 +383,47 @@
           <strong>백테스트(0.25% 비용):</strong> 단독 Full 2021+ +${bt.standaloneFull?.ret || 177}%/Sharpe ${bt.standaloneFull?.sharpe || 1.35}.
           코어 엔진에 ${wpct}% 섞으면 Full +${bt.blendFull?.ret || 124}%/Sharpe ${bt.blendFull?.sharpe || 1.23} (엔진 단독 +${bt.engineFull?.ret || 114}%/${bt.engineFull?.sharpe || 1.12}${(bt.blendFull && bt.engineFull) ? ` → Sharpe +${(bt.blendFull.sharpe - bt.engineFull.sharpe).toFixed(2)}` : ''}), Holdout +${bt.blendHoldout?.ret || 59}%/${bt.blendHoldout?.sharpe || 1.51}.<br>
           <strong>약점(정직):</strong> 저변동 횡보장(2023·2025)엔 코어에 소폭 뒤지고 단독 MDD −22%. 그래서 <u>코어가 아닌 선택적 레이어</u> — 추세코어 자본의 ~${wpct}%까지가 권장.
+        </div>
+      </div>`;
+  }
+
+  // 3-month paper validation of the composed blend (forward out-of-sample).
+  // NAV-based: tracks realized return of holding the recommended daily allocation,
+  // checked against the backtest Sharpe (Tier-2 drift gate) after 3 months.
+  const pp = REPORT.regime.portfolioPaper;
+  if (pp && pp.nDays > 0) {
+    const pct = v => (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+    const monthsBar = Math.min(100, (pp.months / 3) * 100).toFixed(0);
+    const chip = (ok, label) => `<span style="color:${ok ? 'var(--green)' : 'var(--muted)'}">${ok ? '✓' : '○'} ${label}</span>`;
+    const statusColor = pp.status === 'PASS' ? 'var(--green)'
+      : (pp.status === 'review' ? 'var(--amber)' : 'var(--muted)');
+    const navColor = pp.totalReturn >= 0 ? 'var(--green)' : 'var(--red)';
+    document.getElementById('portfolio-paper-panel').innerHTML = `
+      <div class="cand-panel" style="border:1px dashed var(--amber)">
+        <div class="ttl">🧪 3개월 페이퍼 검증 — 주력 블렌드 (NAV 추적 · 실자본 아님)</div>
+        <div style="font-size:13px;margin-bottom:8px">
+          진행 <strong>${pp.nDays}일 / ${pp.months.toFixed(1)}개월</strong>
+          (게이트 3개월) · 상태 <strong style="color:${statusColor}">${pp.status}</strong>
+          <div style="background:#14181f;border-radius:6px;height:6px;margin-top:6px">
+            <div style="background:var(--amber);height:6px;border-radius:6px;width:${monthsBar}%"></div>
+          </div>
+        </div>
+        <table class="cand-table">
+          <thead><tr><th>누적(NAV)</th><th>연환산</th><th>실현 Sharpe</th><th>목표 Sharpe</th><th>MDD</th></tr></thead>
+          <tbody><tr>
+            <td style="color:${navColor}">${pct(pp.totalReturn)}</td>
+            <td>${pct(pp.annReturn)}</td>
+            <td><strong>${pp.annSharpe.toFixed(2)}</strong></td>
+            <td style="color:var(--muted)">${pp.targetSharpe.toFixed(2)}</td>
+            <td style="color:var(--red)">${pct(pp.mdd)}</td>
+          </tr></tbody>
+        </table>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">
+          Tier-2 게이트: ${chip(pp.monthsOk, '3개월+')} · ${chip(pp.sharpeOk, 'Sharpe≥0.5')} ·
+          ${chip(pp.driftOk, `백테스트 괴리<40%${pp.gap != null ? ` (현재 ${(pp.gap * 100).toFixed(0)}%)` : ''}`)}<br>
+          매일의 권장 배분을 그대로 보유했을 때의 실현 성과를 ${pp.start || '시작일'}부터 전향적으로 추적합니다(백필 없음).
+          3개월 누적 후 실현 Sharpe가 백테스트(${pp.targetSharpe.toFixed(2)})와 40% 이내로 수렴하면 실자본 검토 대상이 됩니다.
+          짧은 표본의 Sharpe는 노이즈가 크므로 단기 수치는 참고용입니다.
         </div>
       </div>`;
   }

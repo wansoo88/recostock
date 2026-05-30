@@ -561,6 +561,26 @@ async def main() -> None:
                              pf.get("weights"))
                 except Exception as exc:
                     log.warning("Portfolio compose failed (non-fatal): %s", exc)
+
+                # ── Portfolio NAV paper validation (3-month Tier-2 track) ──────
+                # Forward out-of-sample: record today's blend allocation + the
+                # realized return from holding the prior run's weights. After 3
+                # months the realized Sharpe is checked vs the backtest (drift
+                # gate). Reporting only — never auto-trades. NO backfill.
+                try:
+                    import paper.portfolio_tracker as _pfpaper
+                    if regime.get("portfolio"):
+                        _pfpaper.update(_c, regime["portfolio"])
+                        regime["portfolioPaper"] = _pfpaper.metrics()
+                        _pp = regime["portfolioPaper"]
+                        log.info("Portfolio paper: day %d / %.1f months · NAV %+.1f%% · "
+                                 "Sharpe %.2f (target %.2f, gap %s) · %s",
+                                 _pp["nDays"], _pp["months"], _pp["totalReturn"] * 100,
+                                 _pp["annSharpe"], _pp["targetSharpe"],
+                                 f"{_pp['gap']:.0%}" if _pp["gap"] is not None else "n/a",
+                                 _pp["status"])
+                except Exception as exc:
+                    log.warning("Portfolio paper tracking failed (non-fatal): %s", exc)
         except Exception as exc:
             log.warning("Fear-dip/trend-core eval failed (non-fatal): %s", exc, exc_info=True)
 
