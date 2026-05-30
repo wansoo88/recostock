@@ -49,7 +49,7 @@ SECTORS = ["XLK", "XLF", "XLE", "XLV", "XLY", "XLI"]
 RSI_WINDOW = 14
 SMA_WINDOW = 200
 TOP_K = 2
-SUGGESTED_SATELLITE_WEIGHT = 0.25   # validated blend fraction (75 core / 25 sat)
+SUGGESTED_SATELLITE_WEIGHT = 0.15   # default blend fraction (85 core / 15 sat)
 
 # Backtested expectations for honest display (see module docstring). All cost-
 # adjusted, vs the shipped trend-core engine, data through 2026-05-29.

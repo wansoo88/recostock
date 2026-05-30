@@ -139,7 +139,7 @@ const REPORT = {
       {
         "name": "SPY 추세",
         "value": 756.47998046875,
-        "threshold": 678.6764245605468,
+        "threshold": 678.6764239501953,
         "op": ">",
         "passed": true,
         "format": ".2f",
@@ -392,7 +392,7 @@ const REPORT = {
       "topK": 2,
       "cashHalf": 0,
       "asOf": "2026-05-29",
-      "weight": 0.25,
+      "weight": 0.15,
       "backtest": {
         "engineFull": {
           "ret": 132,
@@ -426,13 +426,13 @@ const REPORT = {
         },
         "ic": 0.035,
         "icT": 3.5,
-        "blendWeight": 0.25
+        "blendWeight": 0.15
       }
     },
     "fearDip": {
       "isEntry": false,
-      "score": 0.20663238542567036,
-      "threshold": 0.4340998746336422,
+      "score": 0.2066324320552478,
+      "threshold": 0.434099678164691,
       "percentile": 0.6098,
       "entry": 756.47998046875,
       "paper": {
@@ -476,23 +476,23 @@ const REPORT = {
     },
     "portfolio": {
       "weights": {
-        "SPY": 0.315,
-        "QQQ": 0.375,
-        "SPXL": 0.0525,
-        "XLK": 0.125,
-        "XLV": 0.125
+        "SPY": 0.357,
+        "QQQ": 0.425,
+        "SPXL": 0.0595,
+        "XLK": 0.075,
+        "XLV": 0.075
       },
-      "cashWeight": 0.0075,
-      "effExposure": 1.1,
-      "coreWeight": 0.75,
-      "sleeveWeight": 0.25,
-      "sleeveInvested": 0.25,
+      "cashWeight": 0.0085,
+      "effExposure": 1.11,
+      "coreWeight": 0.85,
+      "sleeveWeight": 0.15,
+      "sleeveInvested": 0.15,
       "pick": [
         "XLK",
         "XLV"
       ],
       "enabled": true,
-      "note": "추세코어 75% + RSI 섹터 슬리브 25% (XLK + XLV)"
+      "note": "추세코어 85% + RSI 섹터 슬리브 15% (XLK + XLV)"
     },
     "ensemble": {
       "action": "none",
@@ -581,7 +581,7 @@ const REPORT = {
           ⓘ <strong>추세 손절선</strong> = 다음 평일 종가가 이 값보다 낮으면 해당 슬리브 청산(현금화). 추세필터: ${tc.trendFilter || '—'}. SPY $${tc.price} (200일선 ${tc.distPct>=0?'+':''}${tc.distPct}%).
         </div>
         <div style="font-size:11px;color:var(--muted);margin-top:8px;border-top:1px solid #14181f;padding-top:8px">
-          백테스트(SPY+QQQ 50/50, 실제 SPXL decay, VIX≥22 골든크로스, 캄-불 레버 부스트, RSI 섹터 슬리브 25%, IRX 현금수익, 비용 0.25% 차감, look-ahead-safe): 추세코어 단독 Full OOS 2021+ +114%/Sharpe 1.12/MDD −14% · Holdout 2024+ +59%/1.43/−11%. <strong>+섹터 블렌드(주력): Full +131%/1.30/−13% · Holdout +60%/1.56/−13%</strong> — 위험대비(Sharpe) +0.13 개선, 낙폭 동등. 2022 약세장 −7.6%(코어 −9.3%·SPY −18%).
+          백테스트(SPY+QQQ 50/50, 실제 SPXL decay, VIX≥22 골든크로스, 캄-불 레버 부스트, RSI 섹터 슬리브 25%, IRX 현금수익, 비용 0.25% 차감, look-ahead-safe): 추세코어 단독 Full OOS 2021+ +114%/Sharpe 1.12/MDD −14% · Holdout 2024+ +59%/1.43/−11%. <strong>+섹터 블렌드 15%(주력): Full +124%/1.23/−12% · Holdout +59%/1.51/−12%</strong> — 위험대비(Sharpe) +0.11 개선, 낙폭 동등~개선. 2022 약세장 −8.2%(코어 −9.3%·SPY −18%). (슬리브 25%로 올리면 Full +131%/1.30)
         </div>
       </div>`;
   }

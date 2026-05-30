@@ -179,7 +179,7 @@
           ⓘ <strong>추세 손절선</strong> = 다음 평일 종가가 이 값보다 낮으면 해당 슬리브 청산(현금화). 추세필터: ${tc.trendFilter || '—'}. SPY $${tc.price} (200일선 ${tc.distPct>=0?'+':''}${tc.distPct}%).
         </div>
         <div style="font-size:11px;color:var(--muted);margin-top:8px;border-top:1px solid #14181f;padding-top:8px">
-          백테스트(SPY+QQQ 50/50, 실제 SPXL decay, VIX≥22 골든크로스, 캄-불 레버 부스트, RSI 섹터 슬리브 25%, IRX 현금수익, 비용 0.25% 차감, look-ahead-safe): 추세코어 단독 Full OOS 2021+ +114%/Sharpe 1.12/MDD −14% · Holdout 2024+ +59%/1.43/−11%. <strong>+섹터 블렌드(주력): Full +131%/1.30/−13% · Holdout +60%/1.56/−13%</strong> — 위험대비(Sharpe) +0.13 개선, 낙폭 동등. 2022 약세장 −7.6%(코어 −9.3%·SPY −18%).
+          백테스트(SPY+QQQ 50/50, 실제 SPXL decay, VIX≥22 골든크로스, 캄-불 레버 부스트, RSI 섹터 슬리브 25%, IRX 현금수익, 비용 0.25% 차감, look-ahead-safe): 추세코어 단독 Full OOS 2021+ +114%/Sharpe 1.12/MDD −14% · Holdout 2024+ +59%/1.43/−11%. <strong>+섹터 블렌드 15%(주력): Full +124%/1.23/−12% · Holdout +59%/1.51/−12%</strong> — 위험대비(Sharpe) +0.11 개선, 낙폭 동등~개선. 2022 약세장 −8.2%(코어 −9.3%·SPY −18%). (슬리브 25%로 올리면 Full +131%/1.30)
         </div>
       </div>`;
   }

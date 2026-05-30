@@ -5,16 +5,21 @@ has NO cross-sectional sector skill. The RSI sector sleeve (signals/sector_rotat
 adds that one validated edge. This module composes them into a SINGLE actionable
 capital allocation, so the user sees one set of weights to execute manually.
 
-Allocation (config.SECTOR_SLEEVE_WEIGHT, default 0.25):
+Allocation (config.SECTOR_SLEEVE_WEIGHT, default 0.15):
     (1 - w) of capital  -> trend-core weights (SPY / SPXL / QQQ / cash), scaled
     w        of capital  -> RSI sector sleeve, split equally across `pick`
                             tickers; any empty slot (sector below 200SMA) is cash.
 
 Validated 2026-05-30 (cost-adjusted, look-ahead-safe, vs shipped engine):
-    Full OOS 2021+ : engine +114%/Sharpe 1.12/MDD -14% -> blend +131%/1.30/-13%
-    Holdout 2024+  : engine  +59%/Sharpe 1.43/MDD -11% -> blend  +60%/1.56/-13%
-The improvement is risk-adjusted (Sharpe +0.13 both periods at equal-or-lower
-MDD); raw Holdout return is ~flat. The sleeve diversifies, it doesn't supercharge.
+    weight  Full OOS 2021+              Holdout 2024+
+    engine  +114%/Sharpe 1.12/MDD -14% +59%/1.43/-11%
+    10%     +121%/1.20/-13%            +59%/1.49/-12%
+    15% *   +124%/1.23/-12%            +59%/1.51/-12%   <- default (conservative knee)
+    25%     +131%/1.30/-13%            +60%/1.56/-13%
+The improvement is risk-adjusted (Sharpe), not raw return — Holdout total is
+~flat; the sleeve diversifies, it doesn't supercharge. 15% gives ~half the
+Sharpe lift of 25% with smaller weekly sector positions (each pick ~7.5% of
+capital) and less rebalancing impact. Bump to 0.25 for the fuller tilt.
 
 Pure function: dicts in, blended allocation dict out. No I/O. When the sleeve is
 unavailable (weight 0, missing data) it returns the engine allocation unchanged.
@@ -23,7 +28,7 @@ from __future__ import annotations
 
 import config
 
-SECTOR_SLEEVE_WEIGHT = float(getattr(config, "SECTOR_SLEEVE_WEIGHT", 0.25))
+SECTOR_SLEEVE_WEIGHT = float(getattr(config, "SECTOR_SLEEVE_WEIGHT", 0.15))
 LEVER_MULT = float(getattr(config, "LEVER_MULT", 3.0))
 
 # Beta of each instrument vs SPY, for the effective-exposure roll-up.
