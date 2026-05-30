@@ -54,12 +54,16 @@ SUGGESTED_SATELLITE_WEIGHT = 0.15   # default blend fraction (85 core / 15 sat)
 # Backtested expectations for honest display (see module docstring). All cost-
 # adjusted, vs the shipped trend-core engine, data through 2026-05-29.
 BACKTEST = {
-    "engineFull": {"ret": 132, "sharpe": 1.17, "mdd": -14},
-    "engineHoldout": {"ret": 73, "sharpe": 1.44, "mdd": -10},
-    "standaloneFull": {"ret": 147, "sharpe": 1.30, "mdd": -22},
+    # All cost-adjusted, look-ahead-safe, vs the shipped trend_core.evaluate
+    # (day-by-day causal replay), data through 2026-05-29.
+    "engineFull": {"ret": 114, "sharpe": 1.12, "mdd": -14},
+    "engineHoldout": {"ret": 59, "sharpe": 1.43, "mdd": -11},
+    # standalone gated top-2 RSI sleeve (weekly, 200SMA gate, cash otherwise).
+    "standaloneFull": {"ret": 177, "sharpe": 1.35, "mdd": -22},
     "standaloneHoldout": {"ret": 59, "sharpe": 1.46, "mdd": -22},
-    "blendFull": {"ret": 136, "sharpe": 1.28, "mdd": -14},
-    "blendHoldout": {"ret": 69, "sharpe": 1.55, "mdd": -11},
+    # blend at the default SECTOR_SLEEVE_WEIGHT (15%).
+    "blendFull": {"ret": 124, "sharpe": 1.23, "mdd": -12},
+    "blendHoldout": {"ret": 59, "sharpe": 1.51, "mdd": -12},
     "ic": 0.035, "icT": 3.5, "blendWeight": SUGGESTED_SATELLITE_WEIGHT,
 }
 

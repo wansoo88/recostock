@@ -139,7 +139,7 @@ const REPORT = {
       {
         "name": "SPY 추세",
         "value": 756.47998046875,
-        "threshold": 678.6764239501953,
+        "threshold": 678.6764251708985,
         "op": ">",
         "passed": true,
         "format": ".2f",
@@ -281,8 +281,8 @@ const REPORT = {
       {
         "ticker": "XLE",
         "name": "Energy Select",
-        "confidence": 0.6072,
-        "calWin": 0.5701,
+        "confidence": 0.6129,
+        "calWin": 0.5704,
         "rs": -0.0166,
         "rsi": 52.6,
         "above50": false,
@@ -291,7 +291,7 @@ const REPORT = {
         "hi": 58.51,
         "lo": 54.07,
         "bandPct": 0.0394,
-        "estEv": 0.00303,
+        "estEv": 0.00305,
         "passed": false
       },
       {
@@ -395,18 +395,18 @@ const REPORT = {
       "weight": 0.15,
       "backtest": {
         "engineFull": {
-          "ret": 132,
-          "sharpe": 1.17,
+          "ret": 114,
+          "sharpe": 1.12,
           "mdd": -14
         },
         "engineHoldout": {
-          "ret": 73,
-          "sharpe": 1.44,
-          "mdd": -10
+          "ret": 59,
+          "sharpe": 1.43,
+          "mdd": -11
         },
         "standaloneFull": {
-          "ret": 147,
-          "sharpe": 1.3,
+          "ret": 177,
+          "sharpe": 1.35,
           "mdd": -22
         },
         "standaloneHoldout": {
@@ -415,14 +415,14 @@ const REPORT = {
           "mdd": -22
         },
         "blendFull": {
-          "ret": 136,
-          "sharpe": 1.28,
-          "mdd": -14
+          "ret": 124,
+          "sharpe": 1.23,
+          "mdd": -12
         },
         "blendHoldout": {
-          "ret": 69,
-          "sharpe": 1.55,
-          "mdd": -11
+          "ret": 59,
+          "sharpe": 1.51,
+          "mdd": -12
         },
         "ic": 0.035,
         "icT": 3.5,
@@ -431,8 +431,8 @@ const REPORT = {
     },
     "fearDip": {
       "isEntry": false,
-      "score": 0.2066324320552478,
-      "threshold": 0.434099678164691,
+      "score": 0.20663259991840488,
+      "threshold": 0.4341013843448121,
       "percentile": 0.6098,
       "entry": 756.47998046875,
       "paper": {
@@ -781,8 +781,8 @@ const REPORT = {
         <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
           <strong>왜 RSI인가:</strong> 이 시스템의 ML 모델은 섹터 우열 변별력이 사실상 0(횡단면 IC≈0)이지만,
           단순 인과적 RSI-14는 섹터를 가린다(IC +${(bt.ic || 0.035).toFixed(3)}, t=${bt.icT || 3.5}, 비용차감·룩어헤드세이프 검증).<br>
-          <strong>백테스트(0.25% 비용):</strong> 단독 Full 2021+ +${bt.standaloneFull?.ret || 147}%/Sharpe ${bt.standaloneFull?.sharpe || 1.30}.
-          코어 엔진에 ${wpct}% 섞으면 Full +${bt.blendFull?.ret || 136}%/Sharpe ${bt.blendFull?.sharpe || 1.28} (엔진 단독 +${bt.engineFull?.ret || 132}%/${bt.engineFull?.sharpe || 1.17} → Sharpe +0.13), Holdout +${bt.blendHoldout?.ret || 69}%/${bt.blendHoldout?.sharpe || 1.55}.<br>
+          <strong>백테스트(0.25% 비용):</strong> 단독 Full 2021+ +${bt.standaloneFull?.ret || 177}%/Sharpe ${bt.standaloneFull?.sharpe || 1.35}.
+          코어 엔진에 ${wpct}% 섞으면 Full +${bt.blendFull?.ret || 124}%/Sharpe ${bt.blendFull?.sharpe || 1.23} (엔진 단독 +${bt.engineFull?.ret || 114}%/${bt.engineFull?.sharpe || 1.12}${(bt.blendFull && bt.engineFull) ? ` → Sharpe +${(bt.blendFull.sharpe - bt.engineFull.sharpe).toFixed(2)}` : ''}), Holdout +${bt.blendHoldout?.ret || 59}%/${bt.blendHoldout?.sharpe || 1.51}.<br>
           <strong>약점(정직):</strong> 저변동 횡보장(2023·2025)엔 코어에 소폭 뒤지고 단독 MDD −22%. 그래서 <u>코어가 아닌 선택적 레이어</u> — 추세코어 자본의 ~${wpct}%까지가 권장.
         </div>
       </div>`;

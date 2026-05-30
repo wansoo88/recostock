@@ -379,8 +379,8 @@
         <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
           <strong>왜 RSI인가:</strong> 이 시스템의 ML 모델은 섹터 우열 변별력이 사실상 0(횡단면 IC≈0)이지만,
           단순 인과적 RSI-14는 섹터를 가린다(IC +${(bt.ic || 0.035).toFixed(3)}, t=${bt.icT || 3.5}, 비용차감·룩어헤드세이프 검증).<br>
-          <strong>백테스트(0.25% 비용):</strong> 단독 Full 2021+ +${bt.standaloneFull?.ret || 147}%/Sharpe ${bt.standaloneFull?.sharpe || 1.30}.
-          코어 엔진에 ${wpct}% 섞으면 Full +${bt.blendFull?.ret || 136}%/Sharpe ${bt.blendFull?.sharpe || 1.28} (엔진 단독 +${bt.engineFull?.ret || 132}%/${bt.engineFull?.sharpe || 1.17} → Sharpe +0.13), Holdout +${bt.blendHoldout?.ret || 69}%/${bt.blendHoldout?.sharpe || 1.55}.<br>
+          <strong>백테스트(0.25% 비용):</strong> 단독 Full 2021+ +${bt.standaloneFull?.ret || 177}%/Sharpe ${bt.standaloneFull?.sharpe || 1.35}.
+          코어 엔진에 ${wpct}% 섞으면 Full +${bt.blendFull?.ret || 124}%/Sharpe ${bt.blendFull?.sharpe || 1.23} (엔진 단독 +${bt.engineFull?.ret || 114}%/${bt.engineFull?.sharpe || 1.12}${(bt.blendFull && bt.engineFull) ? ` → Sharpe +${(bt.blendFull.sharpe - bt.engineFull.sharpe).toFixed(2)}` : ''}), Holdout +${bt.blendHoldout?.ret || 59}%/${bt.blendHoldout?.sharpe || 1.51}.<br>
           <strong>약점(정직):</strong> 저변동 횡보장(2023·2025)엔 코어에 소폭 뒤지고 단독 MDD −22%. 그래서 <u>코어가 아닌 선택적 레이어</u> — 추세코어 자본의 ~${wpct}%까지가 권장.
         </div>
       </div>`;
