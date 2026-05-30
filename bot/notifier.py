@@ -151,15 +151,14 @@ async def send_daily_signal(
         if ex.get("qqq"):
             lines.append(f"   └ QQQ 진입 ${ex['qqq']['price']:.2f} · 추세 손절선 ${ex['qqq']['stop']:.2f}")
 
-    # Tactical satellite — value-add LAYER on top of the core (reframed 2026-05-26)
+    # Reference signal — conviction is already reflected in the blend's RSI sector
+    # sleeve, so this is confirmation context, NOT a separate trade instruction
+    # (reframed 2026-05-31; the old "reduce SPY 8%, rotate" double-counted the sleeve).
     ens = regime.get("ensemble")
     if ens:
         if ens.get("action") == "conviction":
-            spy_w = (tc.get("spyWeight", 0) * 100) if tc else 50
-            new_w = max(spy_w - 8, 0)
-            lines.append(f"📋 보조 전술: {ens['ticker']} 단기 회전 — SPY 비중 {spy_w:.0f}%→{new_w:.0f}%로 줄여 "
-                         f"8%를 {ens['ticker']}에 5일 배분 (자본 추가 X). "
-                         f"진입 ${ens.get('entry',0):.2f}/TP ${ens.get('tp',0):.2f}/SL ${ens.get('sl',0):.2f}")
+            lines.append(f"📋 참고: conviction 발사({ens['ticker']}) — 이미 위 블렌드의 RSI 섹터 슬리브에 반영됨 "
+                         f"(별도 매매 불필요, 같은 방향 확인용).")
         elif ens.get("action") == "feardip":
             # fear-dip already in core SPXL tilt; here = OOS validation only
             pass  # silenced from telegram, surfaced in 🧪 paper line below
