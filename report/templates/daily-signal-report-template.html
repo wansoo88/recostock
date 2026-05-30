@@ -105,6 +105,7 @@
 
 <div id="gates-panel"></div>
 <div id="candidates-panel"></div>
+<div id="satellite-panel"></div>
 <div id="feardip-panel"></div>
 
 <div id="core-section"></div>
@@ -310,7 +311,7 @@
       </tr>`).join('');
     document.getElementById('candidates-panel').innerHTML = `
       <div class="cand-panel">
-        <div class="ttl">섹터·코어 상대강도 모니터 — 관전용 (실거래는 위 '오늘의 포지션')</div>
+        <div class="ttl">섹터·코어 모니터 — RSI-14 순위 · 관전용 (실거래는 위 '오늘의 포지션')</div>
         <table class="cand-table">
           <thead><tr>
             <th>종목</th><th>이름</th><th>상대강도<br>(1·3개월)</th><th>추세<br>(50/200)</th><th>현재가</th><th>+1σ<br>(5일)</th><th>−1σ<br>(5일)</th><th>보정승률</th>
@@ -328,6 +329,50 @@
   }
 
   // Fear-dip experimental signal (paper-only, added 2026-05-20)
+  // RSI-14 sector rotation SATELLITE (validated 2026-05-30). Optional value-add
+  // layer: the ML model has ~zero cross-sectional skill (IC 0), but a causal
+  // RSI-14 ranks the 6 sectors (IC +0.035, t=3.5). Shown like fear-dip, with
+  // full backtest disclosure and its known weakness (loses in low-vol years).
+  const sat = REPORT.regime.sectorSatellite;
+  if (sat && sat.ranked && sat.ranked.length) {
+    const bt = sat.backtest || {};
+    const pick = sat.pick || [];
+    const wpct = Math.round((sat.weight || 0.25) * 100);
+    const satRows = sat.ranked.map((r, i) => {
+      const inPick = pick.includes(r.ticker);
+      const dot = r.above200 ? '🟢' : '🔴';
+      const star = i < (sat.topK || 2) ? '★ ' : '';
+      return `<tr style="${inPick ? 'background:rgba(72,187,120,0.10)' : ''}">
+        <td>${star}${dot} <strong>${r.ticker}</strong></td>
+        <td style="color:var(--muted)">${r.name}</td>
+        <td class="conf-cell ${r.rsi >= 50 ? 'conf-pass' : 'conf-low'}">${r.rsi.toFixed(0)}</td>
+        <td style="color:var(--muted)">${r.above200 ? '↑200일선' : '↓200일선'} ${r.dist200Pct >= 0 ? '+' : ''}${r.dist200Pct}%</td>
+        <td>$${r.price.toFixed(2)}</td>
+      </tr>`;
+    }).join('');
+    const action = pick.length
+      ? `이번 주 보유: <strong>${pick.join(' + ')}</strong>${sat.cashHalf ? ` (+ 현금 ${sat.cashHalf}칸 — 나머지 상위 섹터가 200일선 아래)` : ''}`
+      : `<strong>전량 현금</strong> — 상위 RSI 섹터가 모두 200일선 아래(추세 약화).`;
+    document.getElementById('satellite-panel').innerHTML = `
+      <div class="cand-panel" style="border:1px dashed var(--green)">
+        <div class="ttl">🛰️ RSI 섹터 로테이션 (선택적 새틀라이트 · 검증됨)</div>
+        <div style="font-size:13px;margin-bottom:8px;color:var(--text)">
+          매주 금요일 6개 섹터를 RSI-14로 정렬해 상위 ${sat.topK || 2}개 보유(200일선 위 조건). ${action}
+        </div>
+        <table class="cand-table">
+          <thead><tr><th>섹터</th><th>이름</th><th>RSI-14</th><th>추세</th><th>현재가</th></tr></thead>
+          <tbody>${satRows}</tbody>
+        </table>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
+          <strong>왜 RSI인가:</strong> 이 시스템의 ML 모델은 섹터 우열 변별력이 사실상 0(횡단면 IC≈0)이지만,
+          단순 인과적 RSI-14는 섹터를 가린다(IC +${(bt.ic || 0.035).toFixed(3)}, t=${bt.icT || 3.5}, 비용차감·룩어헤드세이프 검증).<br>
+          <strong>백테스트(0.25% 비용):</strong> 단독 Full 2021+ +${bt.standaloneFull?.ret || 147}%/Sharpe ${bt.standaloneFull?.sharpe || 1.30}.
+          코어 엔진에 ${wpct}% 섞으면 Full +${bt.blendFull?.ret || 136}%/Sharpe ${bt.blendFull?.sharpe || 1.28} (엔진 단독 +${bt.engineFull?.ret || 132}%/${bt.engineFull?.sharpe || 1.17} → Sharpe +0.13), Holdout +${bt.blendHoldout?.ret || 69}%/${bt.blendHoldout?.sharpe || 1.55}.<br>
+          <strong>약점(정직):</strong> 저변동 횡보장(2023·2025)엔 코어에 소폭 뒤지고 단독 MDD −22%. 그래서 <u>코어가 아닌 선택적 레이어</u> — 추세코어 자본의 ~${wpct}%까지가 권장.
+        </div>
+      </div>`;
+  }
+
   const fd = REPORT.regime.fearDip;
   if (fd) {
     const pm = fd.paper || {};

@@ -51,6 +51,11 @@ from signals.generator import (
 )
 from signals.conviction import select_conviction_signals
 from signals.calibration import calibrated_winrate as _calibrated_winrate
+from signals.sector_rotation import (
+    compute_rsi as _rsi14,
+    evaluate as _sector_satellite,
+    RSI_WINDOW,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger(__name__)
@@ -363,6 +368,10 @@ async def main() -> None:
                         # honest, per-ETF replacement for the fixed 3% target.
                         dvol = float(series.pct_change().dropna().tail(20).std())
                         band = dvol * (5 ** 0.5) if dvol == dvol else 0.0
+                        # RSI-14 — the IC-validated cross-sectional ranking key
+                        # (sectors: IC +0.035 t=3.5 @h=5). See signals/sector_rotation.
+                        rsi14 = (float(_rsi14(series).iloc[-1])
+                                 if len(series) >= RSI_WINDOW + 1 else float("nan"))
                         # True conviction gate (drives the regime-gates banner only).
                         passed = (float(e5) >= thr_c and e3 is not None and e7 is not None
                                   and float(e3) >= thr_c and float(e7) >= thr_c)
@@ -375,6 +384,7 @@ async def main() -> None:
                             "confidence": round(float(e5), 4),
                             "calWin": _calibrated_winrate(float(e5)),
                             "rs": round(rs, 4),
+                            "rsi": round(rsi14, 1) if rsi14 == rsi14 else None,
                             "above50": bool(above50), "above200": bool(above200),
                             "entry": round(px, 2),
                             "hi": round(px * (1 + band), 2),
@@ -383,11 +393,25 @@ async def main() -> None:
                             "estEv": round(est_ev, 5),
                             "passed": bool(passed),
                         })
-                    # Rank by relative strength (rotates daily) — NOT by the
-                    # no-skill confidence proba.
-                    candidates.sort(key=lambda c: c["rs"], reverse=True)
+                    # Rank by RSI-14 — the IC-validated cross-sectional key
+                    # (sectors IC +0.035 t=3.5; beats the 1m+3m momentum sort
+                    # head-to-head +147%/1.30 vs +121%/1.02). NaN RSI sinks last.
+                    candidates.sort(
+                        key=lambda c: (c["rsi"] if c.get("rsi") is not None else -1.0),
+                        reverse=True,
+                    )
                     regime["candidates"] = candidates
                     regime["candidateThreshold"] = thr_c
+
+                    # RSI-14 sector-rotation SATELLITE (validated 2026-05-30).
+                    # The LightGBM model has ~zero cross-sectional skill (IC~0),
+                    # but a causal RSI-14 ranks the 6 sectors (IC +0.035 t=3.5).
+                    # Optional value-add layer (like fear-dip), NOT the core —
+                    # carries -22% standalone MDD and trails in low-vol years.
+                    try:
+                        regime["sectorSatellite"] = _sector_satellite(close_df)
+                    except Exception as exc:
+                        log.warning("Sector satellite eval failed (non-fatal): %s", exc)
 
                     # Skip the legacy loop below — we already produced signals.
                     score_result = {}  # neutralize legacy loop without altering its structure

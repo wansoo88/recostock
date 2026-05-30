@@ -76,6 +76,18 @@ async def send_daily_signal(
         )
         lines.append(f"📋 롱 후보 TOP5: {wl}")
 
+    # RSI-14 sector-rotation satellite (validated 2026-05-30) — optional layer.
+    sat = regime.get("sectorSatellite") or {}
+    if sat.get("ranked"):
+        pick = sat.get("pick") or []
+        wpct = int(round((sat.get("weight", 0.25)) * 100))
+        if pick:
+            extra = f" (+현금 {sat['cashHalf']}칸)" if sat.get("cashHalf") else ""
+            lines.append(f"🛰️ RSI 섹터 로테이션(선택): 이번 주 {' + '.join(pick)}{extra} "
+                         f"— 추세코어 자본의 ~{wpct}%까지 권장")
+        else:
+            lines.append("🛰️ RSI 섹터 로테이션(선택): 상위 섹터 모두 200일선 아래 → 전량 현금")
+
     # Fear-dip experimental signal (paper-only). Surface the entry on a signal
     # day AND the accumulating paper track so the user sees it build over time.
     fd = regime.get("fearDip")
