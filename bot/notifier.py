@@ -44,10 +44,6 @@ async def send_daily_signal(
     if regime.get("stale"):
         lines.insert(1, f"⚠️ 데이터 지연: 최신 종가 {regime.get('dataAsOf')} "
                         f"({regime.get('staleDays')}일 전) — 시그널 신뢰 말고 파이프라인 확인")
-    # Stale-data warning — lead with it so the user can't miss frozen prices.
-    if regime.get("stale"):
-        lines.insert(1, f"⚠️ 데이터 지연: 최신 종가 {regime.get('dataAsOf')} "
-                        f"({regime.get('staleDays')}일 전) — 시그널 신뢰 말고 파이프라인 확인")
     if longs:
         lines.append(f"🟢 LONG: {', '.join(longs)}")
     if inverses:

@@ -93,9 +93,14 @@ DST 양쪽을 커버하기 위해 `20:30 UTC`와 `21:30 UTC` 두 개 cron 실행
 | 2 | 베이스라인 규칙 모델 + 백테스트 | ✅ 완료 |
 | 3 | LightGBM 추론 (v3, +macro, top-K) + walk-forward | ✅ 운영 중 |
 | 4 | 페이퍼 트레이딩 (conviction Friday-K=1 + fear-dip) | ✅ 운영 중 |
-| 5 | 주력 엔진: trend-core(SPY+QQQ 50/50, vol-adaptive) + fear-dip SPXL 1.3x 틸트 | **운영 중 (2026-05-24~)** |
+| 5 | 주력 엔진: trend-core + 캄-불 부스트 + RSI 섹터 슬리브 블렌드(85/15) | **운영 중 (2026-05-24~)** |
 
-**현재 운영 구성:** SPY/QQQ 50/50 추세코어(VIX<22면 200SMA, ≥22면 50&200 골든크로스) + fear-dip 활성 시 SPY 슬리브의 15%를 SPXL(3x)로 틸트. 현금 구간은 BIL/SGOV 단기채 파킹(IRX 수익률). 외부 우분투 cron이 22:00 KST에 GitHub workflow_dispatch 트리거. 자세한 메모: [[project-trend-core-engine]].
+**현재 운영 구성 (2026-05-31 기준):** 주력은 **추세코어 85% + RSI 섹터 슬리브 15% 블렌드** (`signals/portfolio.py` compose). 구성요소:
+- **추세코어** (`signals/trend_core.py`): SPY/QQQ 50/50, VIX<22면 200SMA·≥22면 50&200 골든크로스. 추세-on 시 SPXL 5% 상시, fear-dip 활성 시 15% 틸트, **양쪽 상승+VIX<16(캄-불)이면 SPXL 20% 부스트**(`TREND_CORE_STRONG_SPXL`). 현금 구간 BIL/SGOV(IRX).
+- **RSI 섹터 슬리브** (`signals/sector_rotation.py`): 6개 섹터 RSI-14 상위 2개(200SMA 위 조건)에 자본의 15%(`config.SECTOR_SLEEVE_WEIGHT`). LightGBM은 섹터 횡단면 스킬 0(IC≈0)이라 RSI로 대체. 검증: 블렌드 Full OOS 2021+ +124%/Sharpe1.23, Holdout +59%/1.51 (엔진단독 +114%/1.12 대비 위험조정 개선).
+- **3개월 페이퍼 검증 중** (`paper/portfolio_tracker.py` NAV추적, ~2026-08-29 만기) — Tier-2 게이트 통과 전 실자본 미전환.
+- **stale-data 가드**: 최신 종가가 4일 초과 지연 시 리포트·텔레그램 경고(`data.collector.data_freshness`).
+- conviction/fear-dip 신호는 새틀라이트(참고용); 외부 우분투 cron이 22:00 KST에 workflow_dispatch 트리거. 메모: [[project_trend_core_engine]], [[project_model_skill_rsi_rotation]], [[project_improvement_loop_0531]].
 
 Tier 1: Sharpe > 0.7, MDD < 25%, OOS/IS ≥ 40%, walk-forward 과반 양수, ≥ 120거래일.  
 Tier 2: 페이퍼 3개월+, 실현성과/백테스트 괴리 < 40%, 페이퍼 Sharpe > 0.5.
