@@ -60,29 +60,21 @@ async def send_daily_signal(
     if not signals:
         lines.append("오늘 유효 시그널 없음")
 
-    # Long-only candidate watchlist + top pick (added 2026-05-20).
-    # Shorts intentionally excluded — backtests showed no edge.
+    # Sector/core RSI monitor (top 5 by RSI-14). Replaces the old confidence-ranked
+    # "TOP PICK" block (removed 2026-05-31): it ranked by model confidence — which
+    # has ~zero cross-sectional skill (Spearman -0.02) — AND referenced tp/sl keys
+    # that no longer exist in the candidate dict (latent KeyError when a name passed
+    # the gate). The actionable RSI sectors are already in the 🛰️ and 📐 lines below;
+    # this is a context watchlist only, matching the report's RSI monitor panel.
     candidates = regime.get("candidates") or []
     if candidates:
-        thr_c = regime.get("candidateThreshold", 0.65)
-        passed = [c for c in candidates if c.get("passed")]
-        pick = passed[0] if passed else candidates[0]
-        if passed:
-            lines.append(
-                f"🎯 TOP PICK: {pick['ticker']} (확신도 {pick['confidence']:.3f}) "
-                f"진입 ${pick['entry']:.2f} / TP ${pick['tp']:.2f} / SL ${pick['sl']:.2f}"
-            )
-        else:
-            lines.append(
-                f"🎯 TOP PICK: 대기 — {pick['ticker']} 확신도 {pick['confidence']:.3f} "
-                f"(기준 {thr_c:.2f} 미달, 가장 근접)"
-            )
-        top5 = candidates[:5]
+        top5 = candidates[:5]  # candidates are RSI-sorted in run_daily
         wl = ", ".join(
-            f"{c['ticker']} {c['confidence']:.2f}{'✅' if c.get('passed') else ''}"
-            for c in top5
+            f"{c['ticker']} {c['rsi']:.0f}" for c in top5
+            if c.get("rsi") is not None
         )
-        lines.append(f"📋 롱 후보 TOP5: {wl}")
+        if wl:
+            lines.append(f"📋 섹터·코어 RSI순: {wl} (관전용 · 실행은 아래 포지션)")
 
     # RSI-14 sector-rotation satellite (validated 2026-05-30) — optional layer.
     sat = regime.get("sectorSatellite") or {}
