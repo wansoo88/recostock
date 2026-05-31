@@ -11,10 +11,18 @@ dist/
 build/
 .pytest_cache/
 
-# Raw data — large, re-downloadable
-data/raw/
-# Parquet in raw only; data/logs/ and data/paper/ are committed
-data/raw/*.parquet
+# Raw data — large, re-downloadable. Use `/*` (not a bare `data/raw/`) so git
+# still descends into subdirectories we selectively re-include below: a bare
+# directory exclude can never be undone by a later `!` rule (git won't list an
+# excluded directory's contents at all).
+data/raw/*
+# EXCEPTION: the SPY put/call history accumulates one row per trading day and is
+# NOT re-downloadable (yfinance carries no historical CBOE put/call), so it must
+# be committed like data/logs/ and data/paper/. Descend into options/ and
+# re-include only the CSV; the re-downloadable vol parquets there stay ignored.
+!data/raw/options/
+data/raw/options/*
+!data/raw/options/spy_pc_daily.csv
 
 # Secrets
 .env

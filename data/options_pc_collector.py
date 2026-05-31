@@ -123,6 +123,14 @@ def append_today(today: date | None = None, *,
     """
     if today is None:
         today = date.today()
+    # Weekends are not trading days: on a closed day yfinance returns the prior
+    # Friday's frozen chain, which would pollute the trading-day series the IC
+    # analysis aligns to forward returns. (Market holidays fall on weekdays; those
+    # produce a frozen duplicate of the prior session and are deduplicated at
+    # analysis time, since the cron has no market calendar.)
+    if today.weekday() >= 5:
+        log.info("P/C %s: weekend, not a trading day — skipping", today)
+        return None
     result = compute_spy_pc(n_expirations=n_expirations)
     if result is None:
         return None

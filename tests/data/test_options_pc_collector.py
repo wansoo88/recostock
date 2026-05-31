@@ -138,3 +138,17 @@ def test_status_summary_handles_short_history(tmp_history):
     msg = pc.status_summary()
     assert "4 rows" in msg
     assert "need 56" in msg   # 60 - 4
+
+
+def test_skips_weekend(tmp_history):
+    """A Saturday/Sunday run must not write a row: yfinance returns the prior
+    Friday's frozen chain, which would pollute the trading-day series the IC
+    analysis aligns to forward returns."""
+    fake = MagicMock()
+    fake.options = ["2026-05-22"]
+    fake.option_chain.return_value = _mock_chain(100, 200, 150, 300)
+    fake.history.return_value = pd.DataFrame({"Close": [500.0]})
+    with patch.dict(sys.modules, {"yfinance": MagicMock(Ticker=lambda _: fake)}):
+        row = pc.append_today(today=date(2026, 5, 30))  # Saturday
+    assert row is None
+    assert not tmp_history.exists()  # nothing written on a weekend
