@@ -33,6 +33,22 @@ SIGNAL_THRESHOLD = 0.53           # EMA-smoothed probability gate
 MIN_PAYOFF = 1.1                  # Minimum payoff (avg_win/avg_loss) for signal validity
 LEVERAGE_CONFIDENCE_THRESHOLD = 0.80   # Empirically validated; update after Phase 5
 
+# ── Portfolio blend + trend-core engine knobs ─────────────────────────────────
+# Single source of truth for the live allocation. These were previously only
+# module-level getattr() defaults in signals/portfolio.py + signals/trend_core.py
+# (no config entry), which let the "goal" knobs drift undocumented. Values below
+# MATCH the shipped defaults — changing them changes live exposure, so any bump
+# must first PASS the Tier-1 gate in scripts/sweep_blend_goal.py (cost-adjusted,
+# look-ahead-safe reproduction). Do NOT raise on un-reproduced numbers (app. B).
+SECTOR_SLEEVE_WEIGHT = 0.15            # capital fraction to the RSI sector sleeve
+LEVER_MULT = 3.0                       # SPXL is 3x S&P
+TREND_CORE_SPY_WEIGHT = 0.5           # SPY vs QQQ split of the engine sleeves
+TREND_CORE_TILT_WEIGHT = 0.15         # SPXL fraction of SPY sleeve on fear-dip days
+TREND_CORE_ALWAYS_ON_SPXL = 0.05      # baseline SPXL while SPY trend is on
+TREND_CORE_STRONG_SPXL = 0.20         # calm-uptrend boost SPXL fraction (VIX<CALM)
+TREND_CORE_CALM_VIX_MAX = 16.0        # calm-boost only below this VIX
+TREND_CORE_VIX_THRESHOLD = 22.0       # >= this VIX -> golden-cross trend filter
+
 # ── Conviction strategy (env STRATEGY_MODE=conviction_v1 activates) ────────
 # Four iterations, each layer additive walk-forward improvement:
 #   v1 (single EMA-5):                        n=36  WR 58.33%  Total +12.85%

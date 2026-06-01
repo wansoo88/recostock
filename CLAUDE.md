@@ -98,6 +98,7 @@ DST 양쪽을 커버하기 위해 `20:30 UTC`와 `21:30 UTC` 두 개 cron 실행
 **현재 운영 구성 (2026-05-31 기준):** 주력은 **추세코어 85% + RSI 섹터 슬리브 15% 블렌드** (`signals/portfolio.py` compose). 구성요소:
 - **추세코어** (`signals/trend_core.py`): SPY/QQQ 50/50, VIX<22면 200SMA·≥22면 50&200 골든크로스. 추세-on 시 SPXL 5% 상시, fear-dip 활성 시 15% 틸트, **양쪽 상승+VIX<16(캄-불)이면 SPXL 20% 부스트**(`TREND_CORE_STRONG_SPXL`). 현금 구간 BIL/SGOV(IRX).
 - **RSI 섹터 슬리브** (`signals/sector_rotation.py`): 6개 섹터 RSI-14 상위 2개(200SMA 위 조건)에 자본의 15%(`config.SECTOR_SLEEVE_WEIGHT`). LightGBM은 섹터 횡단면 스킬 0(IC≈0)이라 RSI로 대체. 검증: 블렌드 Full OOS 2021+ +124%/Sharpe1.23, Holdout +59%/1.51 (엔진단독 +114%/1.12 대비 위험조정 개선).
+- **블렌드 "goal" 노브 재현**: 슬리브/STRONG-SPXL 상향 여부는 `scripts/sweep_blend_goal.py`(프로덕션 함수 day-by-day replay, 비용차감·look-ahead-safe)로 재현해 Tier-1 게이트 PASS를 확인한 뒤에만 올린다. 시세 호스트가 차단된 환경에선 `.github/workflows/blend_goal_sweep.yml`(workflow_dispatch)로 CI에서 실행. **미재현 수치로 실자본 노브 상향 금지**(부록 B). 현 라이브는 슬리브 15% 유지.
 - **3개월 페이퍼 검증 중** (`paper/portfolio_tracker.py` NAV추적, ~2026-08-29 만기) — Tier-2 게이트 통과 전 실자본 미전환.
 - **stale-data 가드**: 최신 종가가 4일 초과 지연 시 리포트·텔레그램 경고(`data.collector.data_freshness`).
 - conviction/fear-dip 신호는 새틀라이트(참고용); 외부 우분투 cron이 22:00 KST에 workflow_dispatch 트리거. 메모: [[project_trend_core_engine]], [[project_model_skill_rsi_rotation]], [[project_improvement_loop_0531]].

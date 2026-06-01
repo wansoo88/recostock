@@ -1,0 +1,58 @@
+name: Blend-Goal Sweep (reproduction)
+
+# On-demand only. Reproduces the cost-adjusted, look-ahead-safe blend backtest
+# (scripts/sweep_blend_goal.py) WHERE MARKET DATA IS REACHABLE — the cloud
+# planning sandbox blocks Yahoo/Stooq, but GitHub runners reach yfinance. Use
+# this to regenerate fresh sleeve/STRONG-SPXL numbers before deciding whether to
+# raise the live SECTOR_SLEEVE_WEIGHT goal (see config.py / CLAUDE.md app. B).
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: blend-goal-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write           # commit data/logs/blend_goal_sweep.csv
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Rebuild market data (yfinance + macro)
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: python -m data.collector
+
+      - name: Run blend-goal sweep
+        run: python scripts/sweep_blend_goal.py | tee sweep_stdout.txt
+
+      - name: Upload sweep artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blend-goal-sweep
+          path: |
+            data/logs/blend_goal_sweep.csv
+            sweep_stdout.txt
+
+      - name: Commit sweep result
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/logs/blend_goal_sweep.csv
+          git diff --staged --quiet || git commit -m "sweep: blend-goal reproduction $(date -u +%Y-%m-%d) [skip ci]"
+          git push
