@@ -23,7 +23,8 @@ DRIFT-ZERO PRINCIPLE
       sat = sector_rotation.evaluate(close[:d])      # weekly (Fri) rebalance
       w   = portfolio.compose(tc, sat, sleeve_weight) # {ticker: capital_frac}
     then realise w on day d+1 actual returns (SPXL/sectors are REAL tickers, not
-    synthetic leverage), cash earns the IRX (^IRX) daily yield, and turnover is
+    synthetic leverage), cash earns a short-Treasury daily yield (2Y proxy; see
+    load_real), and turnover is
     charged config.TOTAL_COST_ROUNDTRIP one-way on each weight change.
 
 OUTPUT
@@ -87,8 +88,12 @@ def load_real():
     o = pd.read_parquet(raw)
     close = o["Close"] if isinstance(o.columns, pd.MultiIndex) else o
     vix = pd.read_parquet("data/raw/macro/vix.parquet").iloc[:, 0].dropna()
-    irx = pd.read_parquet("data/raw/macro/yield_2y.parquet").iloc[:, 0].dropna()
-    return close, vix, irx
+    # Cash-leg yield: the 2Y Treasury, which data.collector keeps fresh. The truer
+    # cash proxy is the 13-week bill (^IRX, macro/irx.parquet) but it lags (~2wk
+    # stale) and is numerically near-identical here (mean ~2.09 vs ~2.10), so the
+    # 2Y is the safer, fresher feed.
+    cash_yield = pd.read_parquet("data/raw/macro/yield_2y.parquet").iloc[:, 0].dropna()
+    return close, vix, cash_yield
 
 
 def make_synthetic(seed: int = 7, n: int = 1600):
@@ -105,8 +110,8 @@ def make_synthetic(seed: int = 7, n: int = 1600):
         rets = rng.normal(mu, sig, n)
         close[tk] = 100 * np.exp(np.cumsum(rets))
     vix = pd.Series(15 + 6 * np.abs(rng.normal(0, 1, n)), index=idx, name="VIX")
-    irx = pd.Series(4.5, index=idx)               # flat ~4.5% short rate
-    return close, vix, irx
+    cash_yield = pd.Series(4.5, index=idx)        # flat ~4.5% short rate
+    return close, vix, cash_yield
 
 
 def feardip_mask(index: pd.DatetimeIndex, synthetic: bool) -> pd.Series:
@@ -131,14 +136,14 @@ def feardip_mask(index: pd.DatetimeIndex, synthetic: bool) -> pd.Series:
 
 
 # ── backtest ───────────────────────────────────────────────────────────────────
-def run_blend(close, vix, irx, fd_mask, sleeve_weight, strong_spxl):
+def run_blend(close, vix, cash_yield, fd_mask, sleeve_weight, strong_spxl):
     """Day-by-day causal replay of the production blend. Returns a daily net-return
     Series indexed by the realisation date (d+1)."""
     # Per-cell override of the calm-boost SPXL fraction the engine reads.
     trend_core.STRONG_SPXL = strong_spxl
 
     idx = close.index
-    cash_daily = irx.reindex(idx).ffill().fillna(0.0) / 100.0 / TRADING_DAYS
+    cash_daily = cash_yield.reindex(idx).ffill().fillna(0.0) / 100.0 / TRADING_DAYS
     avail = [t for t in ALLOC_TICKERS if t in close.columns]
     fwd = close[avail].pct_change().shift(-1)           # day d -> realised on d+1
 
@@ -217,7 +222,7 @@ def main():
     args = ap.parse_args()
 
     synthetic = args.self_test
-    close, vix, irx = make_synthetic() if synthetic else load_real()
+    close, vix, cash_yield = make_synthetic() if synthetic else load_real()
     have = [t for t in ALLOC_TICKERS if t in close.columns]
     missing = [t for t in ALLOC_TICKERS if t not in have]
     if "SPY" in missing:
@@ -242,7 +247,7 @@ def main():
           f"{'Hold ret':>9}{'Hold Shp':>9}{'Hold MDD':>9}"
           f"{'WF+':>6}{'gate':>7}")
     for sleeve, strong in cells:
-        daily = run_blend(close, vix, irx, fd, sleeve, strong)
+        daily = run_blend(close, vix, cash_yield, fd, sleeve, strong)
         is_slice = daily[daily.index < FULL_OOS_START]
         full = perf(daily[daily.index >= FULL_OOS_START])
         hold = perf(daily[daily.index >= HOLDOUT_START])
