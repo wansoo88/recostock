@@ -85,6 +85,15 @@
   .trade-table tr:last-child td { border-bottom: none; }
   .pos { color: var(--green); } .neg { color: var(--red); }
   .disclaimer { font-size: 12px; color: #4a5568; margin-top: 36px; border-top: 1px solid var(--border); padding-top: 16px; line-height: 1.6; }
+
+  /* Visualizations — allocation bar + RSI bars (added 2026-06-01) */
+  .alloc-bar { display: flex; height: 18px; border-radius: 5px; overflow: hidden; margin: 8px 0 6px; background: #14181f; }
+  .alloc-seg { height: 100%; }
+  .alloc-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .alloc-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .alloc-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .rsi-bar { background: #14181f; border-radius: 3px; height: 5px; margin-top: 3px; width: 46px; }
+  .rsi-fill { height: 100%; border-radius: 3px; }
 </style>
 </head>
 <body>
@@ -183,11 +192,26 @@
       if (tc.cashWeight > 0)  parts.push(`현금/BIL ${(tc.cashWeight*100).toFixed(0)}%`);
     }
     let alloc = parts.length ? parts.join(' + ') : '현금 100%';
+    // Stacked allocation bar — a visual of the same weights as the text line.
+    const segColor = { SPY:'#63b3ed', QQQ:'#4fd1c5', DIA:'#63b3ed', SPXL:'#f6ad55', TQQQ:'#f6ad55',
+      XLK:'#9f7aea', XLF:'#5a67d8', XLE:'#ed8936', XLV:'#38b2ac', XLY:'#ed64a6', XLI:'#a0aec0' };
+    const allocEntries = blended
+      ? Object.entries(pf.weights || {}).filter(([t, w]) => w > 0.001).sort((a, b) => b[1] - a[1])
+      : [['SPY', tc.spyWeight||0], ['SPXL', tc.spxlWeight||0], ['QQQ', tc.qqqWeight||0]].filter(([t, w]) => w > 0.001);
+    const allocCash = blended ? (pf.cashWeight || 0) : (tc.cashWeight || 0);
+    const allocSegs = allocEntries.map(([t, w]) =>
+        `<div class="alloc-seg" style="width:${(w*100).toFixed(1)}%;background:${segColor[t] || '#9f7aea'}" title="${t} ${(w*100).toFixed(0)}%"></div>`).join('')
+      + (allocCash > 0.001 ? `<div class="alloc-seg" style="width:${(allocCash*100).toFixed(1)}%;background:#2d3748" title="현금 ${(allocCash*100).toFixed(0)}%"></div>` : '');
+    const allocLegend = allocEntries.map(([t, w]) =>
+        `<span><i style="background:${segColor[t] || '#9f7aea'}"></i>${t} ${(w*100).toFixed(0)}%${(t==='SPXL'||t==='TQQQ')?' (3x)':''}</span>`).join('')
+      + (allocCash > 0.001 ? `<span><i style="background:#2d3748"></i>현금 ${(allocCash*100).toFixed(0)}%</span>` : '');
+    const allocBar = `<div class="alloc-bar">${allocSegs}</div><div class="alloc-legend">${allocLegend}</div>`;
     document.getElementById('trendcore-panel').innerHTML = `
       <div class="gates-panel" style="border-left:4px solid var(--green)">
         <div class="ttl"><span>오늘의 포지션 — 추세코어 + 공포 틸트 (주력)</span>
           <span class="overall ${regimeCls}">${expBadge}</span></div>
         <div style="font-size:15px;font-weight:600;margin-bottom:4px">${alloc}</div>
+        ${allocBar}
         <div style="font-size:13px;color:var(--text)">${tc.note}</div>
         ${(() => {
           const ex = tc.exec || {}; const rows = [];
@@ -202,7 +226,7 @@
           ⓘ <strong>추세 손절선</strong> = 다음 평일 종가가 이 값보다 낮으면 해당 슬리브 청산(현금화). 추세필터: ${tc.trendFilter || '—'}. SPY $${tc.price} (200일선 ${tc.distPct>=0?'+':''}${tc.distPct}%).
         </div>
         <div style="font-size:11px;color:var(--muted);margin-top:8px;border-top:1px solid #14181f;padding-top:8px">
-          백테스트(SPY+QQQ 50/50, 실제 SPXL decay, VIX≥22 골든크로스, 캄-불 레버 부스트, RSI 섹터 슬리브 25%, IRX 현금수익, 비용 0.25% 차감, look-ahead-safe): 추세코어 단독 Full OOS 2021+ +114%/Sharpe 1.12/MDD −14% · Holdout 2024+ +59%/1.43/−11%. <strong>+섹터 블렌드 15%(주력): Full +124%/1.23/−12% · Holdout +59%/1.51/−12%</strong> — 위험대비(Sharpe) +0.11 개선, 낙폭 동등~개선. 2022 약세장 −8.2%(코어 −9.3%·SPY −18%). (슬리브 25%로 올리면 Full +131%/1.30)
+          백테스트(SPY+QQQ 50/50, 실제 SPXL decay, VIX≥22 골든크로스, 캄-불 레버 부스트, RSI 섹터 슬리브 15%, IRX 현금수익, 비용 0.25% 차감, look-ahead-safe): 추세코어 단독 Full OOS 2021+ +114%/Sharpe 1.12/MDD −14% · Holdout 2024+ +59%/1.43/−11%. <strong>+섹터 블렌드 15%(주력): Full +124%/1.23/−12% · Holdout +59%/1.51/−12%</strong> — 위험대비(Sharpe) +0.11 개선, 낙폭 동등~개선. 2022 약세장 −8.2%(코어 −9.3%·SPY −18%). (슬리브 0.25 상향은 재현 백테스트에서 +124%/1.26·MDD 악화로 정당성 없음 — 15% 유지)
         </div>
       </div>`;
   }
@@ -217,9 +241,6 @@
     let head, cls, body;
     // Reframed: conviction -> short-term sector rotation WITHIN SPY sleeve
     // (not added capital). Fear-dip -> already in core via SPXL tilt.
-    const tc2 = REPORT.regime.trendCore || {};
-    const spyW = (tc2.spyWeight || 0) * 100;
-    const newSpyW = Math.max(spyW - 8, 0);
     if (ens.action === 'conviction') {
       head = '🟢 참고 신호 — conviction 발사'; cls = 'pass';
       body = `conviction 모델이 <strong>${ens.ticker}</strong>(${ens.name})에 발사했습니다 (calm 상승 레짐).<br>
@@ -380,7 +401,8 @@
       return `<tr style="${inPick ? 'background:rgba(72,187,120,0.10)' : ''}">
         <td>${star}${dot} <strong>${r.ticker}</strong></td>
         <td style="color:var(--muted)">${r.name}</td>
-        <td class="conf-cell ${r.rsi >= 50 ? 'conf-pass' : 'conf-low'}">${r.rsi.toFixed(0)}</td>
+        <td class="conf-cell" style="color:${r.rsi>=50?'var(--green)':'var(--amber)'}">${r.rsi.toFixed(0)}
+          <div class="rsi-bar"><div class="rsi-fill" style="width:${Math.max(0,Math.min(100,r.rsi)).toFixed(0)}%;background:${r.rsi>=50?'var(--green)':'var(--amber)'}"></div></div></td>
         <td style="color:var(--muted)">${r.above200 ? '↑200일선' : '↓200일선'} ${r.dist200Pct >= 0 ? '+' : ''}${r.dist200Pct}%</td>
         <td>$${r.price.toFixed(2)}</td>
       </tr>`;
