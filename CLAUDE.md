@@ -81,8 +81,8 @@ data/universe.py           — ETFMeta 목록 + Phase별 활성 여부
 
 ## GitHub Actions cron
 
-DST 양쪽을 커버하기 위해 `20:30 UTC`와 `21:30 UTC` 두 개 cron 실행.  
-중복 실행 방지: `concurrency.group: daily-signal`.
+`daily_signal.yml`은 **`workflow_dispatch` 전용**이다. GitHub native `schedule`은 1~3시간 지연·누락이 잦아(미국 장 시작 전 도착 보장 불가) 제거됐다. 대신 외부 우분투 서버 cron이 매일 13:00 UTC(22:00 KST, 월~금)에 dispatch API를 POST해 트리거한다(`scripts/trigger_daily_signal.sh`). 중복 실행 방지: `concurrency.group: daily-signal`, `cancel-in-progress: false`.
+`sentiment.yml`은 별개로 native `schedule: 0 13 * * 1-5`를 유지한다(v4용 사전수집, 코어 파이프라인 미편입).
 
 ## Phase roadmap
 

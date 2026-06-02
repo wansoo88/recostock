@@ -14,25 +14,33 @@ Validated rule (cost-adjusted, look-ahead-safe): each week, rank the 6 sectors b
 RSI-14 and hold the top-2 — but only while a chosen sector is above its own 200d
 SMA (else that half parks in cash). Weekly rebalance.
 
-Canonical backtest (scripts numbers reproduced against the SHIPPED trend-core
-engine, 0.25% cost, data through 2026-05-29):
-    standalone gated  Full 2021+   +147% / Sharpe 1.30 / MDD -22%
-                      Holdout 2024+ +59% / Sharpe 1.46 / MDD -22%
-    as a 25% satellite blended with the trend-core engine:
-        Full 2021+   engine +132%/1.17/-14%  ->  +136%/1.28/-14%
-        Holdout 2024+ engine +73%/1.44/-10%  ->   +69%/1.55/-11%
-    i.e. +0.11 Sharpe in BOTH periods at the same drawdown (engine/sleeve daily
-    correlation ~0.57). A modest, risk-adjusted improvement — not a moonshot.
+Canonical cost-adjusted figures (0.25% roundtrip, look-ahead-safe day-by-day
+replay vs the SHIPPED trend-core engine, data through 2026-05-29) live in the
+`BACKTEST` dict below — the single source of truth. Do NOT restate them in this
+prose (it previously drifted to a stale 25%-satellite parameterization that
+contradicted the dict). The shipped config is a 15% sleeve
+(`SUGGESTED_SATELLITE_WEIGHT`): blending the RSI sleeve onto the engine lifts
+risk-adjusted return at the same drawdown (engine/sleeve daily correlation
+~0.57). A modest improvement — not a moonshot.
+
+REPRODUCTION NOTE (2026-06-01, scripts/sweep_blend_goal.py, data~05-29): the
+cost-adjusted sweep reproduced the shipped 15% blend ~3% UNDER the dict
+(+121%/1.22 vs the dict's +124%/1.23). The dict is deliberately NOT corrected
+down right now because `BACKTEST["blendFull"]["sharpe"]` is the hardwired Tier-2
+target that paper/portfolio_tracker._target_sharpe() validates realized NAV
+against — editing it mid-paper-window would move the goalpost under the running
+validation. Reconcile the dict to the reproduction only AFTER the ~2026-08-29
+paper gate (a post-window correction, not a live edit).
 
 Adversarial checks all passed: look-ahead (lag+0 == lag+1), parameter plateau
 (RSI14 top-1/2/3 all Sharpe 1.1-1.6), wins the 2022 bear (+8.4% vs eqw -6.2%),
 survives 0.60% cost (Sharpe 0.93), jackknife-stable (drop any sector ->
 Sharpe 0.83-1.41), 4/5 walk-forward folds positive, ~18 roundtrips/yr.
 KNOWN WEAKNESS: trails the engine in low-volatility grind years (2023-2025, a
-few points each) and carries a -22% standalone MDD. So this is an OPTIONAL
+few points each) and carries a ~-22% standalone MDD. So this is an OPTIONAL
 satellite, NOT the core engine — surfaced like the fear-dip track with full
-disclosure. RSI-14 also beats the session-1 1m+3m momentum ranking head-to-head
-(gated top-2: +147%/1.30 vs +121%/1.02), so it is the better monitor sort key.
+disclosure. RSI-14 also beats the session-1 1m+3m momentum ranking head-to-head,
+so it is the better monitor sort key.
 
 This module is a pure function: prices in, ranking + actionable pick out. No I/O.
 """

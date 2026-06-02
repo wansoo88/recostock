@@ -180,6 +180,12 @@ def metrics() -> dict:
     ann_ret = float(nav.iloc[-1] ** (1 / yrs) - 1.0) if yrs > 0 and nav.iloc[-1] > 0 else 0.0
     eq = nav.values
     mdd = float(((eq - np.maximum.accumulate(eq)) / np.maximum.accumulate(eq)).min()) if len(eq) > 1 else 0.0
+    # Two-sided gap BY DESIGN (cf. one-sided paper/tracker.py:tier2_gate_check).
+    # This track validates the blend against a SPECIFIC backtest claim
+    # (blendFull Sharpe 1.23): realized NAV should CONVERGE toward it, so drift
+    # in EITHER direction is suspect — a large outperformance would signal the
+    # claim was lucky/leaked, not a pass. The conviction track instead asks "is
+    # the live model at least as good as backtest?", where beating it is fine.
     gap = abs(ann_sharpe - target) / target if target else None
 
     months_ok = months >= config.TIER2_PAPER_MONTHS_MIN

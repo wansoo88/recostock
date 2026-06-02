@@ -571,7 +571,7 @@ async def main() -> None:
                 # The single actionable allocation the user executes. The sleeve
                 # (regime["sectorSatellite"], set in the conviction block) adds the
                 # one validated cross-sectional edge the engine lacks. Weight is
-                # config.SECTOR_SLEEVE_WEIGHT (default 25%); falls back to the pure
+                # config.SECTOR_SLEEVE_WEIGHT (default 15%); falls back to the pure
                 # engine when the sleeve is unavailable.
                 try:
                     from signals.portfolio import compose as _compose
