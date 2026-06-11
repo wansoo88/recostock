@@ -74,6 +74,43 @@ def test_last_weights_before_empty_store():
     assert pt.last_weights_before("2026-06-01") is None
 
 
+def test_nav_history_chronological():
+    close = _close({"SPY": [100.0, 110.0]}, ["2026-06-01", "2026-06-02"])
+    pf = {"weights": {"SPY": 1.0}, "cashWeight": 0.0}
+    pt.update(close.iloc[:1], pf, today="2026-06-01")
+    pt.update(close, pf, today="2026-06-02")
+    h = pt.nav_history()
+    assert [r["date"] for r in h] == ["2026-06-01", "2026-06-02"]
+    assert h[0]["nav"] == pytest.approx(1.0)
+    assert h[1]["nav"] == pytest.approx(1.10, abs=1e-9)
+
+
+def test_attribution_splits_engine_and_sleeve():
+    # Day1 -> Day2: SPY +10% at 50%w (engine +5%p), XLK -10% at 50%w (sleeve -5%p)
+    close = _close({"SPY": [100.0, 110.0], "XLK": [50.0, 45.0]},
+                   ["2026-06-01", "2026-06-02"])
+    pf = {"weights": {"SPY": 0.5, "XLK": 0.5}, "cashWeight": 0.0}
+    pt.update(close.iloc[:1], pf, today="2026-06-01")
+    pt.update(close, pf, today="2026-06-02")
+    at = pt.attribution(close)
+    assert at["engine"] == pytest.approx(0.05, abs=1e-6)
+    assert at["sleeve"] == pytest.approx(-0.05, abs=1e-6)
+    assert at["cost"] == pytest.approx(0.0, abs=1e-9)   # no turnover
+    assert at["approx"] is True and at["days"] == 1
+
+
+def test_attribution_none_with_single_record():
+    close = _close({"SPY": [100.0]}, ["2026-06-01"])
+    pt.update(close, {"weights": {"SPY": 1.0}, "cashWeight": 0.0}, today="2026-06-01")
+    assert pt.attribution(close) is None
+
+
+def test_metrics_exposes_chart_pace_constants():
+    m = pt.metrics()                       # works even on the empty store
+    assert m["paceDaily"] > 0
+    assert m["sigmaDaily"] > m["paceDaily"]  # daily vol dwarfs daily drift
+
+
 def test_blended_two_asset_return():
     close = _close({"SPY": [100.0, 110.0], "QQQ": [100.0, 90.0]},
                    ["2026-06-01", "2026-06-02"])

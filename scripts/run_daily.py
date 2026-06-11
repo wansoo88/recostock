@@ -202,7 +202,11 @@ async def main() -> None:
                     regime_label, exposure = "caution", 0.75
                 else:
                     regime_label, exposure = "normal", 1.0
-                regime = {"label": regime_label, "exposure": exposure, "vix": vix_latest}
+                # update(), NOT reassignment — the stale-data guard above already
+                # stored dataAsOf/stale/staleDays in this dict, and a fresh dict
+                # here silently dropped them (report/telegram lost the freshness
+                # banner whenever VIX data existed, i.e. always; found 2026-06-12).
+                regime.update({"label": regime_label, "exposure": exposure, "vix": vix_latest})
 
                 # Macro overlay: credit spread and yield curve can escalate regime.
                 # Credit spread (BAMLH0A0HYM2) normal ~3-4%, stress ≥5%, crisis ≥7%.
@@ -618,12 +622,20 @@ async def main() -> None:
                     if regime.get("portfolio"):
                         # Same record-date convention as portfolio_tracker.update.
                         _data_date = pd.Timestamp(_c.index[-1]).normalize()
+                        # Latest valid close per target ticker — feeds the
+                        # report's share-count calculator.
+                        _prices = {}
+                        for _tk in (regime["portfolio"].get("weights") or {}):
+                            _v = latest_close.get(_tk)
+                            if _v is not None and _v == _v and float(_v) > 0:
+                                _prices[_tk] = round(float(_v), 2)
                         regime["decision"] = build_decision(
                             regime["portfolio"], tc,
                             prev=_pfpaper.last_weights_before(_data_date),
                             satellite=regime.get("sectorSatellite"),
                             fear_dip=regime.get("fearDip"),
                             vix=regime.get("vix"),
+                            prices=_prices,
                         )
                         _d = regime["decision"]
                         log.info("Decision: %s — %d trade(s), vs holdings of %s",
@@ -641,6 +653,15 @@ async def main() -> None:
                     if regime.get("portfolio"):
                         _pfpaper.update(_c, regime["portfolio"])
                         regime["portfolioPaper"] = _pfpaper.metrics()
+                        # NAV chart + per-leg attribution for the report
+                        # (display only — additive approximation, labeled).
+                        regime["portfolioPaper"]["history"] = _pfpaper.nav_history()
+                        try:
+                            _attr = _pfpaper.attribution(_c)
+                            if _attr:
+                                regime["portfolioPaper"]["attribution"] = _attr
+                        except Exception as exc:
+                            log.warning("Attribution failed (non-fatal): %s", exc)
                         _pp = regime["portfolioPaper"]
                         log.info("Portfolio paper: day %d / %.1f months · NAV %+.1f%% · "
                                  "Sharpe %.2f (target %.2f, gap %s) · %s",

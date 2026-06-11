@@ -1,0 +1,66 @@
+name: Signal Watchdog
+
+# Detects the silent-failure mode of the daily pipeline: the external Ubuntu
+# cron (scripts/trigger_daily_signal.sh) dies / dispatch fails / the workflow
+# errors before committing, and nobody notices until signals stop arriving.
+#
+# Uses GitHub's native `schedule` ON PURPOSE despite its 1-3h jitter: the
+# primary trigger path stays the external cron (reliable timing); this is a
+# best-effort backstop where "late warning" still beats "no warning". Fires
+# ~90 min after the 13:00 UTC dispatch window.
+on:
+  schedule:
+    - cron: "30 14 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Determine which report date should exist
+        id: target
+        run: |
+          # The pipeline (13:00 UTC Mon-Fri) writes docs/<UTC date>.html.
+          # If this watchdog run was delayed past midnight UTC or lands on a
+          # weekend (extreme jitter), check the most recent weekday instead.
+          now_dow=$(date -u +%u)   # 1=Mon .. 7=Sun
+          now_hm=$(date -u +%H%M)
+          target=$(date -u +%F)
+          if [ "$now_dow" -gt 5 ] || [ "$now_hm" -lt 1330 ]; then
+            for i in 1 2 3; do
+              dow=$(date -u -d "-$i day" +%u)
+              if [ "$dow" -le 5 ]; then
+                target=$(date -u -d "-$i day" +%F)
+                break
+              fi
+            done
+          fi
+          echo "date=$target" >> "$GITHUB_OUTPUT"
+          echo "Checking for docs/$target.html"
+
+      - name: Check report exists
+        id: check
+        run: |
+          if [ -f "docs/${{ steps.target.outputs.date }}.html" ]; then
+            echo "Report present — pipeline OK."
+            echo "missing=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::docs/${{ steps.target.outputs.date }}.html missing — daily pipeline did not run/commit."
+            echo "missing=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Telegram alert
+        if: steps.check.outputs.missing == '1'
+        run: |
+          curl -sf -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode text="🚨 recostock 워치독: ${{ steps.target.outputs.date }} 리포트가 발행되지 않았습니다. 우분투 cron(trigger_daily_signal.sh) 또는 daily_signal 워크플로 실패 가능 — Actions 로그를 확인하세요. (이 경보 자체도 GitHub schedule 특성상 1~3시간 지연될 수 있음)"

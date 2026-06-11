@@ -122,6 +122,33 @@ def test_fallback_without_decision_still_shows_target():
     assert "📐 목표 포트폴리오" in msg and "QQQ 4" in msg
 
 
+def test_stop_alert_line_rendered():
+    dec = _decision()
+    dec["alerts"] = ["추세 손절선 근접 — SPY 종가가 손절선($690.00)까지 여유 1.4%. 이탈 시 SPY·SPXL 청산 지시가 나옵니다"]
+    msg = nb.build_daily_message([], _regime(decision=dec), "", _DATE)
+    assert "⚠️ 추세 손절선 근접" in msg
+    assert msg.index("오늘 할 일") < msg.index("손절선 근접") < msg.index("목표 포트폴리오")
+
+
+def test_sparkline_in_paper_line():
+    reg = _regime()
+    reg["portfolioPaper"]["history"] = [
+        {"date": f"2026-06-0{i+1}", "nav": v}
+        for i, v in enumerate([1.0, 1.005, 1.012, 0.998, 0.97, 0.977, 0.969, 0.969])]
+    msg = nb.build_daily_message([], reg, "", _DATE)
+    paper_line = next(l for l in msg.splitlines() if l.startswith("🧪"))
+    assert any(ch in paper_line for ch in "▁▂▃▄▅▆▇█")
+
+
+def test_sparkline_unit():
+    assert nb._sparkline([]) == ""
+    assert nb._sparkline([1.0]) == ""
+    assert nb._sparkline([1.0, 1.0, 1.0]) == "▄▄▄"
+    s = nb._sparkline([1.0, 1.1, 0.9, 1.2])
+    assert len(s) == 4 and s[-1] == "█" and "▁" in s
+    assert len(nb._sparkline(list(range(30)))) == 10   # width cap
+
+
 def test_footer_link_and_disclaimer():
     msg = nb.build_daily_message([], _regime(), "https://pages/2026-06-10.html", _DATE)
     assert "🔗 상세 리포트: https://pages/2026-06-10.html" in msg

@@ -35,6 +35,17 @@ _TRADING_DAYS = 252
 _COLS = ["date", "weights", "cash_weight", "eff_exposure",
          "gross_ret", "cost", "net_ret", "nav"]
 
+# Leg classification for the attribution report (display only).
+_ENGINE_TICKERS = {"SPY", "QQQ", "DIA", "SPXL", "TQQQ"}
+_SLEEVE_TICKERS = {"XLK", "XLF", "XLE", "XLV", "XLY", "XLI"}
+
+# Backtest pace constants for the NAV chart's expected-path overlay (display
+# only, NOT a gate). blendFull (+124% over the Full OOS window 2021-01 ~
+# 2026-05, ~5.4y) -> CAGR; vol backed out of CAGR/Sharpe — an approximation
+# (Sharpe is arithmetic, this is geometric), clearly labeled approximate in
+# the report. Sourced from the same BACKTEST dict the Tier-2 target uses.
+_BACKTEST_YEARS = 5.4
+
 
 def _target_sharpe() -> float:
     """Backtest blend Sharpe to validate against (single source: sector_rotation)."""
@@ -54,6 +65,69 @@ def load() -> pd.DataFrame:
 def save(df: pd.DataFrame) -> None:
     PATH.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(PATH, index=False)
+
+
+def nav_history() -> list[dict]:
+    """Chronological NAV points for the report chart. [{date, nav, net}, ...]."""
+    hist = load()
+    if hist.empty:
+        return []
+    hist = hist.sort_values("date")
+    return [{"date": str(r["date"]), "nav": round(float(r["nav"]), 6),
+             "net": round(float(r["net_ret"]), 6)}
+            for _, r in hist.iterrows()]
+
+
+def attribution(close_df: pd.DataFrame) -> dict | None:
+    """Cumulative per-leg return contribution since tracking start (display only).
+
+    Recomputes each recorded day's leg returns from current close prices and
+    sums them additively: engine (SPY/QQQ/SPXL), sector sleeve (XL*), cash
+    yield, and turnover cost (exact, from the recorded `cost` column). Additive
+    daily contributions ignore compounding and any later price revisions, so
+    the total is an APPROXIMATION of the NAV's cumulative return — labeled as
+    such in the report. None until there are 2+ records or prices are missing.
+    """
+    hist = load()
+    if len(hist) < 2:
+        return None
+    hist = hist.sort_values("date").reset_index(drop=True)
+    close_df = close_df.loc[:, ~close_df.columns.duplicated()]
+    idx = close_df.index.normalize()
+
+    eng = slv = csh = 0.0
+    cost = float(hist["cost"].astype(float).sum())
+    daily_y = _cash_daily_yield()
+    matched = 0
+    for i in range(1, len(hist)):
+        prev, cur = hist.iloc[i - 1], hist.iloc[i]
+        p_date = pd.Timestamp(prev["date"]).normalize()
+        c_date = pd.Timestamp(cur["date"]).normalize()
+        have_p, have_c = (idx == p_date).any(), (idx == c_date).any()
+        if not (have_p and have_c):
+            continue
+        p_row = close_df[idx == p_date].iloc[-1]
+        c_row = close_df[idx == c_date].iloc[-1]
+        prev_w = json.loads(prev["weights"]) if isinstance(prev["weights"], str) else dict(prev["weights"])
+        for tk, w in prev_w.items():
+            if tk not in close_df.columns or pd.isna(p_row[tk]) or pd.isna(c_row[tk]) or p_row[tk] <= 0:
+                continue
+            r = w * (float(c_row[tk]) / float(p_row[tk]) - 1.0)
+            if tk in _SLEEVE_TICKERS:
+                slv += r
+            else:
+                eng += r
+        gap = max(1, (c_date - p_date).days)
+        csh += float(prev.get("cash_weight", 0.0) or 0.0) * daily_y * gap
+        matched += 1
+    if matched == 0:
+        return None
+    return {
+        "engine": round(eng, 5), "sleeve": round(slv, 5),
+        "cash": round(csh, 5), "cost": round(-cost, 5),
+        "total": round(eng + slv + csh - cost, 5),
+        "days": matched, "approx": True,
+    }
 
 
 def last_weights_before(date) -> dict | None:
@@ -196,10 +270,22 @@ def metrics() -> dict:
     hist = load()
     n = len(hist)
     target = _target_sharpe()
+    # NAV-chart pace overlay (display only, never a gate): backtest CAGR from
+    # the blendFull claim, daily sigma backed out of CAGR / target Sharpe —
+    # an approximation, labeled as such where rendered.
+    try:
+        from signals.sector_rotation import BACKTEST
+        _bt_ret = float(BACKTEST["blendFull"]["ret"]) / 100.0
+    except Exception:
+        _bt_ret = 1.24
+    _cagr = (1.0 + _bt_ret) ** (1.0 / _BACKTEST_YEARS) - 1.0
+    pace_daily = (1.0 + _cagr) ** (1.0 / _TRADING_DAYS) - 1.0
+    sigma_daily = (_cagr / target) / (_TRADING_DAYS ** 0.5) if target else 0.0
     base = {
         "nDays": n, "months": 0.0, "totalReturn": 0.0, "annReturn": 0.0,
         "annSharpe": 0.0, "mdd": 0.0, "start": None, "last": None,
         "targetSharpe": target, "gap": None,
+        "paceDaily": round(pace_daily, 6), "sigmaDaily": round(sigma_daily, 6),
         "monthsOk": False, "sharpeOk": False, "driftOk": False,
         "passed": False, "status": "no data",
     }
@@ -238,6 +324,7 @@ def metrics() -> dict:
         "annSharpe": round(ann_sharpe, 3), "mdd": round(mdd, 4),
         "start": start, "last": last,
         "targetSharpe": round(target, 3), "gap": round(gap, 3) if gap is not None else None,
+        "paceDaily": round(pace_daily, 6), "sigmaDaily": round(sigma_daily, 6),
         "monthsOk": months_ok, "sharpeOk": sharpe_ok, "driftOk": drift_ok,
         "passed": passed, "status": status,
     }

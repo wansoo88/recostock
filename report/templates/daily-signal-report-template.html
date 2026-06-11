@@ -215,12 +215,22 @@
       + (cashW > 0.001 ? `<span><i style="background:#2d3748"></i>현금 ${(cashW * 100).toFixed(0)}%</span>` : '');
 
     const ex = tc.exec || {};
+    // 여유 = how far the close sits ABOVE the stop; red under 3% (alert zone).
+    const room = e => {
+      if (!e || !e.stop || e.stop <= 0) return '<td style="color:var(--muted)">—</td>';
+      const r = (e.price / e.stop - 1) * 100;
+      const col = r < 3 ? 'var(--red)' : (r < 5 ? 'var(--amber)' : 'var(--green)');
+      return `<td style="color:${col};font-weight:600">${r >= 0 ? '+' : ''}${r.toFixed(1)}%</td>`;
+    };
     const stopRows = [];
-    if (ex.spy)  stopRows.push(`<tr><td><strong>SPY</strong> (+SPXL 연동)</td><td>$${ex.spy.price.toFixed(2)}</td><td style="color:var(--red)">$${ex.spy.stop.toFixed(2)}</td><td style="color:var(--muted)">종가 이탈 시 SPY·SPXL 청산</td></tr>`);
-    if (ex.qqq)  stopRows.push(`<tr><td><strong>QQQ</strong></td><td>$${ex.qqq.price.toFixed(2)}</td><td style="color:var(--red)">$${ex.qqq.stop.toFixed(2)}</td><td style="color:var(--muted)">종가 이탈 시 QQQ 청산</td></tr>`);
-    if (ex.spxl) stopRows.push(`<tr><td><strong>SPXL</strong> (3x)</td><td>$${ex.spxl.price.toFixed(2)}</td><td style="color:var(--muted)">—</td><td style="color:var(--muted)">${ex.tiltDaysLeft != null ? `공포 틸트 만료 ~${ex.tiltDaysLeft}일` : 'SPY 추세 손절선 연동'}</td></tr>`);
+    if (ex.spy)  stopRows.push(`<tr><td><strong>SPY</strong> (+SPXL 연동)</td><td>$${ex.spy.price.toFixed(2)}</td><td style="color:var(--red)">$${ex.spy.stop.toFixed(2)}</td>${room(ex.spy)}<td style="color:var(--muted)">종가 이탈 시 SPY·SPXL 청산</td></tr>`);
+    if (ex.qqq)  stopRows.push(`<tr><td><strong>QQQ</strong></td><td>$${ex.qqq.price.toFixed(2)}</td><td style="color:var(--red)">$${ex.qqq.stop.toFixed(2)}</td>${room(ex.qqq)}<td style="color:var(--muted)">종가 이탈 시 QQQ 청산</td></tr>`);
+    if (ex.spxl) stopRows.push(`<tr><td><strong>SPXL</strong> (3x)</td><td>$${ex.spxl.price.toFixed(2)}</td><td style="color:var(--muted)">—</td><td style="color:var(--muted)">—</td><td style="color:var(--muted)">${ex.tiltDaysLeft != null ? `공포 틸트 만료 ~${ex.tiltDaysLeft}일` : 'SPY 추세 손절선 연동'}</td></tr>`);
     const stopTable = stopRows.length
-      ? `<table class="cand-table" style="margin-top:10px"><thead><tr><th>종목</th><th>현재가</th><th>손절선</th><th>규칙</th></tr></thead><tbody>${stopRows.join('')}</tbody></table>` : '';
+      ? `<table class="cand-table" style="margin-top:10px"><thead><tr><th>종목</th><th>현재가</th><th>손절선</th><th>여유</th><th>규칙</th></tr></thead><tbody>${stopRows.join('')}</tbody></table>` : '';
+    const alertBanner = (d && (d.alerts || []).length)
+      ? d.alerts.map(a => `<div style="background:rgba(246,173,85,0.12);border:1px solid var(--amber);border-radius:6px;padding:8px 12px;margin-top:10px;font-size:12px;color:var(--amber);font-weight:600">⚠️ ${a}</div>`).join('')
+      : '';
 
     const why = (d && d.why || []).map(w => `<li>${w}</li>`).join('');
     const bt = sat.backtest || {};
@@ -233,11 +243,15 @@
         <div style="font-size:15px;font-weight:600;margin-bottom:4px">${allocText || '현금 100%'}</div>
         <div class="alloc-bar">${segs}</div>
         <div class="alloc-legend">${legend}</div>
+        ${alertBanner}
         ${stopTable}
         ${why ? `<ul class="why-list">${why}</ul>` : ''}
         <div style="font-size:11px;color:var(--muted);margin-top:8px">
           ⓘ 시장노출 ${effExp}x = SPXL(3배) 환산 포함 베타. 섹터 슬리브는 <strong>금요일 종가 기준 주 1회</strong> 교체 — 평일의 RSI 순위 변동은 다음 금요일까지 반영하지 않습니다.
         </div>
+        <details class="fineprint" id="calc-details"><summary>🧮 주문 수량 계산기 — 자본 입력 → 종목별 주수</summary>
+          <div id="calc-body" class="fineprint-body"></div>
+        </details>
         <details class="fineprint"><summary>백테스트 근거 (비용 0.25% 차감 · look-ahead-safe)</summary>
           <div class="fineprint-body">
             블렌드(주력) Full OOS 2021+ +${(bt.blendFull && bt.blendFull.ret) || 124}% / Sharpe ${(bt.blendFull && bt.blendFull.sharpe) || 1.23} / MDD ${(bt.blendFull && bt.blendFull.mdd) || -12}% ·
@@ -248,6 +262,65 @@
           </div>
         </details>
       </div>`;
+  })();
+
+  // ── 2b. 주문 수량 계산기 — 자본 입력 → 종목별 주수 (토스 소수점 거래 기준) ──
+  (function () {
+    const body = document.getElementById('calc-body');
+    const wrap = document.getElementById('calc-details');
+    if (!body || !wrap) return;
+    const prices = (d && d.prices) || {};
+    const tw = (d && d.targetWeights) || {};
+    const rows = Object.entries(tw)
+      .filter(([t, w]) => w > 0.001 && prices[t] > 0)
+      .sort((a, b) => b[1] - a[1]);
+    if (!rows.length) { wrap.style.display = 'none'; return; }
+    let LS; try { LS = window.localStorage; } catch (e) { /* storage blocked */ }
+    LS = LS || { getItem: () => null, setItem: () => {} };
+    const inputCss = 'background:#14181f;border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 8px';
+    body.innerHTML = `
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:6px 0 10px;font-size:12px;color:var(--text)">
+        <label>자본 <input id="calc-cap" type="number" min="0" step="any" style="width:130px;${inputCss}"></label>
+        <select id="calc-cur" style="${inputCss}"><option value="KRW">₩ KRW</option><option value="USD">$ USD</option></select>
+        <label>환율(₩/$) <input id="calc-fx" type="number" min="0" step="any" style="width:90px;${inputCss}"></label>
+      </div>
+      <div id="calc-out"></div>`;
+    const $i = id => document.getElementById(id);
+    $i('calc-cap').value = LS.getItem('recostock_cap') || '';
+    $i('calc-cur').value = LS.getItem('recostock_cur') || 'KRW';
+    $i('calc-fx').value = LS.getItem('recostock_fx') || '1380';
+    function recalc() {
+      const cap = parseFloat($i('calc-cap').value);
+      const fx = parseFloat($i('calc-fx').value) || 1380;
+      const cur = $i('calc-cur').value;
+      LS.setItem('recostock_cap', $i('calc-cap').value);
+      LS.setItem('recostock_cur', cur);
+      LS.setItem('recostock_fx', $i('calc-fx').value);
+      const out = $i('calc-out');
+      if (!(cap > 0)) {
+        out.innerHTML = '<span style="color:var(--muted)">투자 자본을 입력하면 목표 비중대로 종목별 주문 수량을 계산합니다. 입력값은 이 브라우저에만 저장됩니다.</span>';
+        return;
+      }
+      const capUsd = cur === 'KRW' ? cap / fx : cap;
+      const lev = t => (t === 'SPXL' || t === 'TQQQ') ? ' <span style="color:var(--amber)">(3x)</span>' : '';
+      const trs = rows.map(([t, w]) => {
+        const amt = capUsd * w;
+        const sh = amt / prices[t];
+        const krw = cur === 'KRW' ? `<div style="color:var(--muted);font-size:10px">₩${Math.round(amt * fx).toLocaleString()}</div>` : '';
+        return `<tr><td><strong>${t}</strong>${lev(t)}</td><td>${(w * 100).toFixed(1).replace(/\.0$/, '')}%</td>
+          <td>$${amt.toFixed(0)}${krw}</td><td>$${prices[t].toFixed(2)}</td>
+          <td><strong>${sh.toFixed(2)}주</strong></td></tr>`;
+      }).join('');
+      const cashRow = (d.cashWeight || 0) > 0.001
+        ? `<tr><td><strong>현금/BIL</strong></td><td>${(d.cashWeight * 100).toFixed(0)}%</td>
+           <td>$${(capUsd * d.cashWeight).toFixed(0)}</td><td colspan="2" style="color:var(--muted)">BIL/SGOV 파킹 권장</td></tr>` : '';
+      out.innerHTML = `<table class="cand-table">
+        <thead><tr><th>종목</th><th>비중</th><th>금액</th><th>기준가</th><th>주문 수량</th></tr></thead>
+        <tbody>${trs}${cashRow}</tbody></table>
+        <div style="margin-top:6px;color:var(--muted)">기준가 = ${reg.dataAsOf || '최근'} 종가 (소수점 거래 기준). 주문 시점 시세가 다르면 수량을 비례 조정하세요. 환율은 직접 수정 가능합니다.</div>`;
+    }
+    ['calc-cap', 'calc-cur', 'calc-fx'].forEach(id => $i(id).addEventListener('input', recalc));
+    recalc();
   })();
 
   // ── 3. ⚡ 참고 신호 — conviction satellite + fear-dip entry (fire-only) ────
@@ -280,6 +353,63 @@
       const monthsBar = Math.min(100, (pp.months / 3) * 100).toFixed(0);
       const chip = (ok, label) => `<span style="color:${ok ? 'var(--green)' : 'var(--muted)'}">${ok ? '✓' : '○'} ${label}</span>`;
       const statusColor = pp.status === 'PASS' ? 'var(--green)' : (pp.status === 'review' ? 'var(--amber)' : 'var(--muted)');
+
+      // NAV chart — realized curve vs the backtest pace ±1σ cone. The cone is
+      // an APPROXIMATION (CAGR/Sharpe-implied vol), labeled as such; the real
+      // gate is the 3-month Sharpe check, never this picture.
+      let chartHtml = '';
+      const hist = (pp.history || []).filter(h => h && isFinite(h.nav));
+      if (hist.length >= 2 && pp.paceDaily != null) {
+        const W = 600, H = 190, L = 42, R = 8, T = 10, B = 24;
+        const n = hist.length;
+        const pace = i => Math.pow(1 + pp.paceDaily, i);
+        const sd = pp.sigmaDaily || 0;
+        const up = i => pace(i) * Math.exp(sd * Math.sqrt(i));
+        const dn = i => pace(i) * Math.exp(-sd * Math.sqrt(i));
+        let vmin = 1, vmax = 1;
+        for (let i = 0; i < n; i++) {
+          vmin = Math.min(vmin, hist[i].nav, dn(i));
+          vmax = Math.max(vmax, hist[i].nav, up(i));
+        }
+        const padv = (vmax - vmin) * 0.08 + 1e-9; vmin -= padv; vmax += padv;
+        const X = i => L + i * (W - L - R) / (n - 1);
+        const Y = v => T + (H - T - B) * (1 - (v - vmin) / (vmax - vmin));
+        const seq = f => Array.from({ length: n }, (_, i) => `${X(i).toFixed(1)},${Y(f(i)).toFixed(1)}`).join(' ');
+        const navPts = hist.map((h, i) => `${X(i).toFixed(1)},${Y(h.nav).toFixed(1)}`).join(' ');
+        const coneRev = Array.from({ length: n }, (_, i) => n - 1 - i)
+          .map(i => `${X(i).toFixed(1)},${Y(dn(i)).toFixed(1)}`).join(' ');
+        const pctL = v => ((v - 1) * 100).toFixed(1) + '%';
+        const paceAnnual = ((Math.pow(1 + pp.paceDaily, 252) - 1) * 100).toFixed(0);
+        chartHtml = `
+        <div style="margin-top:12px">
+        <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:#14181f;border-radius:8px" role="img" aria-label="페이퍼 NAV 차트">
+          <polygon points="${seq(up)} ${coneRev}" fill="rgba(113,128,150,0.13)"/>
+          <polyline points="${seq(pace)}" fill="none" stroke="#718096" stroke-width="1.2" stroke-dasharray="5 4"/>
+          <line x1="${L}" y1="${Y(1).toFixed(1)}" x2="${W - R}" y2="${Y(1).toFixed(1)}" stroke="#2d3748" stroke-width="1"/>
+          <polyline points="${navPts}" fill="none" stroke="#63b3ed" stroke-width="2"/>
+          <circle cx="${X(n - 1).toFixed(1)}" cy="${Y(hist[n - 1].nav).toFixed(1)}" r="3" fill="#63b3ed"/>
+          <text x="${L - 5}" y="${(Y(1) + 3).toFixed(1)}" fill="#718096" font-size="10" text-anchor="end">0%</text>
+          <text x="${L - 5}" y="${T + 8}" fill="#718096" font-size="10" text-anchor="end">${pctL(vmax)}</text>
+          <text x="${L - 5}" y="${H - B}" fill="#718096" font-size="10" text-anchor="end">${pctL(vmin)}</text>
+          <text x="${L}" y="${H - 8}" fill="#718096" font-size="10">${hist[0].date.slice(5)}</text>
+          <text x="${W - R}" y="${H - 8}" fill="#718096" font-size="10" text-anchor="end">${hist[n - 1].date.slice(5)} (${pctL(hist[n - 1].nav)})</text>
+        </svg>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">
+          <span style="color:#63b3ed">━ 실현 NAV</span> ·
+          <span style="color:#718096">┅ 백테스트 페이스(연 ${paceAnnual}%) / 음영 ±1σ</span>
+          — CAGR·Sharpe 환산 근사, 시각 참고용 (게이트는 3개월 Sharpe 검사)
+        </div></div>`;
+      }
+
+      // Cumulative per-leg contribution (additive approximation, from tracker)
+      let attrHtml = '';
+      const at = pp.attribution;
+      if (at) {
+        const fv = v => `<span style="color:${v >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:600">${v >= 0 ? '+' : ''}${(v * 100).toFixed(2)}%p</span>`;
+        attrHtml = `<div style="font-size:12px;color:var(--muted);margin-top:8px">
+          누적 기여(단순합산 근사): 추세코어 ${fv(at.engine)} · 섹터 슬리브 ${fv(at.sleeve)} · 현금이자 ${fv(at.cash)} · 거래비용 ${fv(at.cost)}</div>`;
+      }
+
       blendHtml = `
         <div style="font-size:13px;margin-bottom:8px">
           주력 블렌드 NAV 추적 <strong>${pp.nDays}일 / ${pp.months.toFixed(1)}개월</strong> (게이트 3개월) ·
@@ -302,7 +432,8 @@
           Tier-2 게이트: ${chip(pp.monthsOk, '3개월+')} · ${chip(pp.sharpeOk, 'Sharpe≥0.5')} ·
           ${chip(pp.driftOk, `백테스트 괴리<40%${pp.gap != null ? ` (현재 ${(pp.gap * 100).toFixed(0)}%)` : ''}`)} ·
           ${pp.start || ''}부터 전향 추적(백필 없음). 짧은 표본의 Sharpe는 노이즈가 크므로 만기 전 수치는 참고용.
-        </div>`;
+        </div>
+        ${chartHtml}${attrHtml}`;
     }
     let fdHtml = '';
     if (pm.n > 0 || pm.open > 0) {

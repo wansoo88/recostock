@@ -33,6 +33,19 @@ _PAPER_STATUS_KO = {
     "review": "점검 필요",
     "PASS": "게이트 통과",
 }
+_SPARK_BLOCKS = "▁▂▃▄▅▆▇█"
+
+
+def _sparkline(values: list[float], width: int = 10) -> str:
+    """Unicode mini-chart of the last `width` values. '' when too short."""
+    vals = [float(v) for v in values][-width:]
+    if len(vals) < 2:
+        return ""
+    lo, hi = min(vals), max(vals)
+    if hi - lo < 1e-12:
+        return "▄" * len(vals)
+    return "".join(_SPARK_BLOCKS[int((v - lo) / (hi - lo) * (len(_SPARK_BLOCKS) - 1))]
+                   for v in vals)
 
 
 def build_daily_message(
@@ -64,6 +77,8 @@ def build_daily_message(
         for t in d.get("trades", []):
             lev = " (3x)" if t["ticker"] in ("SPXL", "TQQQ") else ""
             lines.append(f"   • {t['ticker']}{lev}  {t['fromPct']:g}% → {t['toPct']:g}%  ({t['action']})")
+        for a in d.get("alerts", []):
+            lines.append(f"⚠️ {a}")
 
     # ── 2. 목표 포트폴리오 + 손절선 ───────────────────────────────────────────
     target_line = eff = None
@@ -109,8 +124,10 @@ def build_daily_message(
     pp = regime.get("portfolioPaper") or {}
     if pp.get("nDays", 0) > 0:
         status = _PAPER_STATUS_KO.get(pp.get("status"), pp.get("status", ""))
+        spark = _sparkline([h["nav"] for h in pp.get("history", []) if "nav" in h])
+        spark_s = f" {spark}" if spark else ""
         lines += ["", (f"🧪 페이퍼 검증(실자본 아님) {pp['nDays']}일/3개월 · "
-                       f"NAV {pp['totalReturn']*100:+.1f}% · Sharpe {pp['annSharpe']:.2f} "
+                       f"NAV {pp['totalReturn']*100:+.1f}%{spark_s} · Sharpe {pp['annSharpe']:.2f} "
                        f"(목표 {pp['targetSharpe']:.2f}) · {status}")]
 
     # ── 6. Footer ─────────────────────────────────────────────────────────────

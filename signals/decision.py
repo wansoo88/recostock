@@ -25,6 +25,10 @@ from __future__ import annotations
 # Weight drifts below this are rounding noise, not a trade instruction.
 REBALANCE_MIN_DELTA = 0.005
 _LEV_TICKERS = {"SPXL", "TQQQ"}
+# Warn when a sleeve's close is within this % of its trend stop — gives the
+# manual executor advance notice that an all-cash flip may be near, instead
+# of a surprise exit instruction one morning.
+STOP_WARN_PCT = 3.0
 
 
 def _fmt_pct(w: float) -> str:
@@ -44,7 +48,8 @@ def build_decision(portfolio: dict, trend_core: dict | None,
                    prev: dict | None = None,
                    satellite: dict | None = None,
                    fear_dip: dict | None = None,
-                   vix: float | None = None) -> dict:
+                   vix: float | None = None,
+                   prices: dict | None = None) -> dict:
     """Compose today's single decision from the blend target + prior holdings.
 
     portfolio  : signals.portfolio.compose output (target allocation)
@@ -53,6 +58,8 @@ def build_decision(portfolio: dict, trend_core: dict | None,
                  (paper.portfolio_tracker.last_weights_before), or None
     satellite  : signals.sector_rotation.evaluate_weekly output (why-bullets)
     fear_dip   : regime["fearDip"] dict (why-bullets)
+    prices     : {ticker: latest close} — passed through (filtered to target
+                 tickers) for the report's share-count calculator
     """
     target = {k: float(v) for k, v in (portfolio.get("weights") or {}).items()}
     cash_w = float(portfolio.get("cashWeight", max(0.0, 1.0 - sum(target.values()))))
@@ -127,6 +134,33 @@ def build_decision(portfolio: dict, trend_core: dict | None,
                        f"{'·'.join(pick)} — RSI-14 상위{as_of_s}, 주 1회 교체")
         else:
             why.append("섹터 슬리브: 전량 현금 — 상위 RSI 섹터가 모두 200일선 아래")
+        # Rotation preview: today's RAW ranking vs the Friday-pinned pick. The
+        # held pick stays until Friday's close, but flagging the divergence
+        # early means Monday's swap never arrives as a surprise.
+        ranked = sat.get("ranked") or []
+        top_k = int(sat.get("topK", 2) or 2)
+        daily_pick = [r["ticker"] for r in ranked[:top_k] if r.get("above200")]
+        if pick and daily_pick and set(daily_pick) != set(pick):
+            why.append(f"참고: 오늘 기준 일간 RSI 순위는 {'·'.join(daily_pick)} — "
+                       f"금요일 종가로 확정되면 다음 주 교체 가능")
+
+    # ── Stop-proximity alerts ─────────────────────────────────────────────────
+    alerts: list[str] = []
+    ex = tc.get("exec") or {}
+    for leg, applies in (("spy", "SPY·SPXL"), ("qqq", "QQQ")):
+        e = ex.get(leg)
+        if not (e and e.get("price") and e.get("stop") and e["stop"] > 0):
+            continue
+        dist = (float(e["price"]) / float(e["stop"]) - 1.0) * 100
+        if 0 <= dist < STOP_WARN_PCT:
+            alerts.append(f"추세 손절선 근접 — {leg.upper()} 종가가 손절선(${e['stop']:.2f})까지 "
+                          f"여유 {dist:.1f}%. 이탈 시 {applies} 청산 지시가 나옵니다")
+
+    out_prices = {}
+    for tk in target:
+        v = (prices or {}).get(tk)
+        if v is not None and v == v and float(v) > 0:
+            out_prices[tk] = round(float(v), 2)
 
     return {
         "stance": stance,
@@ -137,6 +171,8 @@ def build_decision(portfolio: dict, trend_core: dict | None,
         "cashWeight": round(cash_w, 4),
         "effExposure": round(eff, 2),
         "why": why,
+        "alerts": alerts,
+        "prices": out_prices,
         "prevDate": prev_date,
     }
 

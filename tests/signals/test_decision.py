@@ -88,6 +88,47 @@ def test_calm_boost_and_feardip_bullets():
     assert any("공포매수" in w for w in d_fd["why"])
 
 
+def test_prices_passthrough_filters_to_target():
+    prices = {"SPY": 739.22, "QQQ": 716.07, "SPXL": 264.53, "XLV": 152.65,
+              "XLK": 184.18, "XLE": 58.33,           # XLE not in target -> dropped
+              "BAD": float("nan")}
+    d = build_decision(_pf(_BLEND), _tc(), prev=None, prices=prices)
+    assert d["prices"]["SPY"] == 739.22
+    assert "XLE" not in d["prices"] and "BAD" not in d["prices"]
+
+
+def test_stop_proximity_alert_fires_inside_threshold():
+    tc = _tc()
+    tc["exec"] = {"spy": {"price": 700.0, "stop": 690.0},     # +1.4% room -> alert
+                  "qqq": {"price": 716.0, "stop": 621.6}}     # +15% room  -> quiet
+    d = build_decision(_pf(_BLEND), tc, prev=None)
+    assert len(d["alerts"]) == 1
+    assert "SPY" in d["alerts"][0] and "1.4%" in d["alerts"][0]
+
+
+def test_no_alert_when_stops_far():
+    tc = _tc()
+    tc["exec"] = {"spy": {"price": 739.22, "stop": 682.10},
+                  "qqq": {"price": 716.07, "stop": 621.61}}
+    d = build_decision(_pf(_BLEND), tc, prev=None)
+    assert d["alerts"] == []
+
+
+def test_sleeve_rotation_preview_bullet():
+    sat = {"pick": ["XLV", "XLK"], "pickAsOf": "2026-06-05", "topK": 2,
+           "ranked": [{"ticker": "XLE", "above200": True},   # daily order changed
+                      {"ticker": "XLV", "above200": True},
+                      {"ticker": "XLK", "above200": True}]}
+    d = build_decision(_pf(_BLEND), _tc(), prev=None, satellite=sat)
+    assert any("XLE·XLV" in w and "교체 가능" in w for w in d["why"])
+    # identical daily order -> no preview noise
+    sat2 = dict(sat, ranked=[{"ticker": "XLV", "above200": True},
+                             {"ticker": "XLK", "above200": True},
+                             {"ticker": "XLE", "above200": True}])
+    d2 = build_decision(_pf(_BLEND), _tc(), prev=None, satellite=sat2)
+    assert not any("교체 가능" in w for w in d2["why"])
+
+
 def test_format_target_line_sorted_with_leverage_tag():
     d = build_decision(_pf(_BLEND, cash=0.0), _tc(), prev=None)
     line = format_target_line(d)
