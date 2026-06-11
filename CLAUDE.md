@@ -6,6 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 미국 인덱스/섹터/레버리지 ETF 당일 방향성 시그널 시스템.  
 GitHub Actions가 매일 배치 실행 → HTML 리포트를 GitHub Pages에 발행 → 텔레그램으로 링크 발송 → **사용자 수동 실행** (토스증권, 한국 브로커, PDT 룰 비적용).
+토스증권 Open API(2026-06 신규, 미국주식 주문 지원)를 통한 자동화는 `REVIEW_2026-06-12_auto_trading.md` 참조 — Tier-2 게이트(~2026-08-29) 통과 전 실자본 자동주문 금지, 그 전엔 읽기 전용(잔고 대조)까지만.
 
 ## Commands
 
@@ -85,6 +86,7 @@ data/universe.py           — ETFMeta 목록 + Phase별 활성 여부
 
 `daily_signal.yml`은 **`workflow_dispatch` 전용**이다. GitHub native `schedule`은 1~3시간 지연·누락이 잦아(미국 장 시작 전 도착 보장 불가) 제거됐다. 대신 외부 우분투 서버 cron이 매일 13:00 UTC(22:00 KST, 월~금)에 dispatch API를 POST해 트리거한다(`scripts/trigger_daily_signal.sh`). 중복 실행 방지: `concurrency.group: daily-signal`, `cancel-in-progress: false`.
 `sentiment.yml`은 별개로 native `schedule: 0 13 * * 1-5`를 유지한다(v4용 사전수집, 코어 파이프라인 미편입).
+`watchdog.yml`(2026-06-12): 평일 14:30 UTC native schedule 백스톱 — 당일 `docs/<날짜>.html` 미발행 시 텔레그램 경보. 우분투 cron·dispatch·워크플로 실패의 무감지 리스크용이며, native 지터(1~3h)는 "늦은 경보 > 무경보"로 허용.
 
 ## Phase roadmap
 
