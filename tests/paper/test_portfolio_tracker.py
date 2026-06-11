@@ -58,6 +58,22 @@ def test_idempotent_same_day_rerun():
     assert len(out) == 1  # no duplicate row
 
 
+def test_last_weights_before_returns_prior_holdings():
+    close = _close({"SPY": [100.0, 101.0], "QQQ": [50.0, 50.0]},
+                   ["2026-06-01", "2026-06-02"])
+    pt.update(close.iloc[:1], {"weights": {"SPY": 1.0}, "cashWeight": 0.0}, today="2026-06-01")
+    pt.update(close, {"weights": {"QQQ": 1.0}, "cashWeight": 0.0}, today="2026-06-02")
+    prev = pt.last_weights_before("2026-06-02")     # strictly before -> day 1
+    assert prev["date"] == "2026-06-01"
+    assert prev["weights"] == {"SPY": 1.0}
+    # same-day re-run must never diff against its own (overwritten) record
+    assert pt.last_weights_before("2026-06-01") is None
+
+
+def test_last_weights_before_empty_store():
+    assert pt.last_weights_before("2026-06-01") is None
+
+
 def test_blended_two_asset_return():
     close = _close({"SPY": [100.0, 110.0], "QQQ": [100.0, 90.0]},
                    ["2026-06-01", "2026-06-02"])

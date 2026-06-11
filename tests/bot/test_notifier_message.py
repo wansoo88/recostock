@@ -1,20 +1,134 @@
-"""Regression tests for the telegram daily-signal message construction.
+"""Regression tests for the telegram daily message (decision-first, 2026-06-11).
 
-Guards the 2026-05-31 bug: the old '🎯 TOP PICK' line referenced pick['tp'] and
-pick['sl'], but the candidate dict (rebuilt 2026-05-29) has no tp/sl keys — so a
-passing candidate would raise KeyError and the whole telegram push would fail.
-These tests build the message with the real candidate contract and assert no crash.
+The message contract: lead with the single decision (오늘 할 일), then the target
+portfolio + stops, then why-bullets. The old scattered surfaces (RSI watchlist,
+duplicate satellite suggestion, regime/expectancy header, flat-57% noise) must
+NOT reappear. build_daily_message is pure, so most tests need no event loop.
 """
 import asyncio
 import types
+from datetime import date
 
 import pytest
 
 import bot.notifier as nb
 
+_DATE = date(2026, 6, 10)
+
+
+def _decision(stance="hold", trades=None):
+    return {
+        "stance": stance,
+        "headline": {"hold": "오늘 할 일: 없음 — 그대로 보유",
+                     "rebalance": f"오늘 할 일: 리밸런스 {len(trades or [])}건",
+                     "all_cash": "오늘 할 일: 전량 현금화 (추세 OFF) — 매도 후 BIL/SGOV 파킹"}[stance],
+        "trades": trades or [],
+        "nTrades": len(trades or []),
+        "targetWeights": {"SPY": 0.3995, "QQQ": 0.425, "SPXL": 0.0255, "XLV": 0.075, "XLK": 0.075},
+        "cashWeight": 0.0,
+        "effExposure": 1.05,
+        "why": ["추세 ON — SPY·QQQ 모두 200일선 위 (SPY 200일선 대비 +8.4%)",
+                "VIX 18.9 — 평시 구성 (SPXL 기본 5%)",
+                "섹터 슬리브 15%: XLV·XLK — RSI-14 상위 (2026-06-05 금요일 종가 선정), 주 1회 교체"],
+        "prevDate": "2026-06-09",
+    }
+
+
+def _regime(**over):
+    base = {
+        "label": "normal", "exposure": 1.0, "vix": 18.9,
+        "dataAsOf": "2026-06-09", "staleDays": 1, "stale": False,
+        "decision": _decision(),
+        "trendCore": {"coreOn": True, "exec": {
+            "spy": {"price": 739.22, "stop": 682.10},
+            "qqq": {"price": 716.07, "stop": 621.61},
+            "spxl": {"price": 264.53}, "tiltDaysLeft": None}},
+        "portfolio": {"weights": {"SPY": 0.3995, "QQQ": 0.425, "SPXL": 0.0255,
+                                  "XLV": 0.075, "XLK": 0.075},
+                      "cashWeight": 0.0, "effExposure": 1.05, "enabled": True,
+                      "coreWeight": 0.85, "sleeveWeight": 0.15},
+        "sectorSatellite": {"ranked": [{"ticker": "XLV", "rsi": 67.5}], "pick": ["XLV", "XLK"]},
+        "portfolioPaper": {"nDays": 8, "months": 0.36, "totalReturn": -0.0309,
+                           "annSharpe": -4.374, "targetSharpe": 1.23, "status": "warming up"},
+        "candidates": [{"ticker": "XLV", "rsi": 67.5, "calWin": 0.57, "passed": False}],
+    }
+    base.update(over)
+    return base
+
+
+def test_hold_message_leads_with_decision():
+    msg = nb.build_daily_message([], _regime(), "https://x/r.html", _DATE)
+    lines = msg.splitlines()
+    assert lines[0].startswith("📊 recostock 데일리")
+    assert any("✅ 오늘 할 일: 없음" in l for l in lines)
+    # decision comes before the portfolio section
+    assert msg.index("오늘 할 일") < msg.index("목표 포트폴리오")
+
+
+def test_rebalance_trades_are_listed():
+    trades = [{"ticker": "XLE", "action": "전량 매도", "fromPct": 7.5, "toPct": 0.0, "deltaPct": -7.5},
+              {"ticker": "XLV", "action": "신규 매수", "fromPct": 0.0, "toPct": 7.5, "deltaPct": 7.5}]
+    msg = nb.build_daily_message([], _regime(decision=_decision("rebalance", trades)), "", _DATE)
+    assert "🔄 오늘 할 일: 리밸런스 2건" in msg
+    assert "XLE  7.5% → 0%  (전량 매도)" in msg
+    assert "XLV  0% → 7.5%  (신규 매수)" in msg
+
+
+def test_target_portfolio_and_stops():
+    msg = nb.build_daily_message([], _regime(), "", _DATE)
+    assert "📐 목표 포트폴리오 — 시장노출 ≈1.05x" in msg
+    assert "QQQ 42.5%" in msg and "SPXL 2.5% (3x)" in msg
+    assert "SPY 종가 < $682.10 → SPY·SPXL 청산" in msg
+    assert "QQQ 종가 < $621.61 → QQQ 청산" in msg
+
+
+def test_why_bullets_present():
+    msg = nb.build_daily_message([], _regime(), "", _DATE)
+    assert "💡 근거" in msg
+    assert "추세 ON" in msg and "VIX 18.9" in msg and "XLV·XLK" in msg
+
+
+def test_noise_surfaces_removed():
+    msg = nb.build_daily_message([], _regime(), "", _DATE)
+    assert "RSI순" not in msg                      # old watchlist line
+    assert "RSI 섹터 로테이션(선택)" not in msg     # duplicate satellite suggestion
+    assert "종합 기대값" not in msg                 # expectancy header
+    assert "노출도" not in msg                      # VIX-regime exposure (conflicted with 1.05x)
+    assert "57%" not in msg                         # flat calibrated-probability noise
+
+
+def test_stale_warning_leads():
+    msg = nb.build_daily_message([], _regime(stale=True, dataAsOf="2026-05-15", staleDays=16), "", _DATE)
+    lines = msg.splitlines()
+    assert "데이터 지연" in lines[1] and "2026-05-15" in lines[1]
+
+
+def test_conviction_signal_renders_as_reference():
+    sig = types.SimpleNamespace(ticker="XLK", entry=184.18, tp=189.71, sl=182.34,
+                                winrate=0.7368, sample_n=19, direction="long", leverage=1)
+    msg = nb.build_daily_message([sig], _regime(), "", _DATE)
+    assert "⚡ 참고 — conviction 신호: XLK" in msg
+    assert "n=19" in msg and "별개" in msg
+
+
+def test_paper_validation_one_liner():
+    msg = nb.build_daily_message([], _regime(), "", _DATE)
+    assert "🧪 페이퍼 검증(실자본 아님) 8일/3개월" in msg
+    assert "목표 1.23" in msg and "검증 초기" in msg
+
+
+def test_fallback_without_decision_still_shows_target():
+    msg = nb.build_daily_message([], _regime(decision=None), "", _DATE)
+    assert "📐 목표 포트폴리오" in msg and "QQQ 4" in msg
+
+
+def test_footer_link_and_disclaimer():
+    msg = nb.build_daily_message([], _regime(), "https://pages/2026-06-10.html", _DATE)
+    assert "🔗 상세 리포트: https://pages/2026-06-10.html" in msg
+    assert "수동 실행" in msg
+
 
 class _FakeBot:
-    """Captures the message instead of hitting the network."""
     sent = []
 
     def __init__(self, token=None):
@@ -24,57 +138,9 @@ class _FakeBot:
         _FakeBot.sent.append(text)
 
 
-@pytest.fixture(autouse=True)
-def _fake_telegram(monkeypatch):
+def test_send_daily_signal_smoke(monkeypatch):
     _FakeBot.sent = []
-    fake_mod = types.SimpleNamespace(Bot=_FakeBot)
-    # send_daily_signal does `import telegram` inside the function
-    monkeypatch.setitem(__import__("sys").modules, "telegram", fake_mod)
-
-
-def _candidate(ticker, rsi, passed=False):
-    # Mirror the real candidate dict from scripts/run_daily.py (no tp/sl keys!).
-    return {
-        "ticker": ticker, "name": ticker, "confidence": 0.66,
-        "calWin": 0.57, "rs": 0.05, "rsi": rsi,
-        "above50": True, "above200": True,
-        "entry": 100.0, "hi": 103.0, "lo": 97.0, "bandPct": 0.03,
-        "estEv": 0.01, "passed": passed,
-    }
-
-
-def _run(regime):
-    from datetime import date
-    asyncio.run(nb.send_daily_signal("tok", "chat", [], regime, "", date(2026, 5, 31)))
-    return _FakeBot.sent[-1] if _FakeBot.sent else ""
-
-
-def test_passing_candidate_does_not_crash():
-    # The exact old-bug trigger: a candidate with passed=True.
-    regime = {"label": "normal", "exposure": 1.0,
-              "candidates": [_candidate("XLK", 72, passed=True),
-                             _candidate("XLV", 68)]}
-    msg = _run(regime)  # must not raise KeyError
-    assert "XLK" in msg
-    assert "TP" not in msg  # old fixed-TP/SL framing is gone
-    assert "RSI순" in msg   # new RSI watchlist present
-
-
-def test_no_candidates_section_when_empty():
-    msg = _run({"label": "normal", "exposure": 1.0, "candidates": []})
-    assert "RSI순" not in msg
-
-
-def test_rsi_watchlist_lists_top_names():
-    regime = {"label": "normal", "exposure": 1.0,
-              "candidates": [_candidate("XLK", 72), _candidate("XLE", 60),
-                             _candidate("XLF", 54)]}
-    msg = _run(regime)
-    assert "XLK 72" in msg and "XLE 60" in msg
-
-
-def test_stale_warning_surfaces():
-    regime = {"label": "normal", "exposure": 1.0, "candidates": [],
-              "stale": True, "dataAsOf": "2026-05-15", "staleDays": 16}
-    msg = _run(regime)
-    assert "데이터 지연" in msg and "2026-05-15" in msg
+    monkeypatch.setitem(__import__("sys").modules, "telegram",
+                        types.SimpleNamespace(Bot=_FakeBot))
+    asyncio.run(nb.send_daily_signal("tok", "chat", [], _regime(), "", _DATE))
+    assert _FakeBot.sent and "오늘 할 일" in _FakeBot.sent[-1]

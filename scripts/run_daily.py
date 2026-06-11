@@ -54,8 +54,8 @@ from signals.conviction import select_conviction_signals
 from signals.calibration import calibrated_winrate as _calibrated_winrate
 from signals.sector_rotation import (
     compute_rsi as _rsi14,
-    evaluate as _sector_satellite,
-    RSI_WINDOW,
+    evaluate_weekly as _sector_satellite,   # pick pinned to Friday close — the
+    RSI_WINDOW,                             # cadence the blend backtest validated
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -164,6 +164,13 @@ async def main() -> None:
             )
             vix_df = pd.read_parquet(vix_path) if vix_path.exists() else None
 
+            # Last VALID close per ticker. The raw frame's final row can hold NaN
+            # for individual tickers (per-ticker last-row gaps), and NaN entry
+            # prices slipped past `entry <= 0` checks. Defined here (not inside
+            # the signal block) so the Friday paper rebalance can't hit a
+            # NameError when inference is skipped.
+            latest_close = close_df.ffill().iloc[-1]
+
             # ── Stale-data guard ──────────────────────────────────────────────
             # The pipeline publishes signals stamped with TODAY's calendar date.
             # If yfinance silently returns stale prices (API outage, the
@@ -239,6 +246,7 @@ async def main() -> None:
                 )
 
             proba_history = load_proba_history()
+            strategy_mode = os.environ.get("STRATEGY_MODE", "production_v3")
 
             # ── Score today + rolling backtest stats ─────────────────────────
             # Feature matrix is built ONCE and shared — score_today and
@@ -246,7 +254,14 @@ async def main() -> None:
             try:
                 X = build_feature_matrix_v3(close_df, vix_df)
                 score_result, raw_proba = score_today(close_df, vix_df, proba_history, X=X)
-                rolling_stats = compute_rolling_stats(close_df, vix_df, proba_history, X=X)
+                # rolling_stats feeds ONLY the legacy per-ticker loop. Production
+                # (conviction mode) uses fixed backtested TP/SL stats instead, so
+                # the rolling model replay over a year of history was pure waste
+                # there — skip it.
+                if strategy_mode == "conviction_v1":
+                    rolling_stats = pd.DataFrame()
+                else:
+                    rolling_stats = compute_rolling_stats(close_df, vix_df, proba_history, X=X)
                 proba_history = _append_and_save(proba_history, raw_proba)
             except FileNotFoundError as exc:
                 log.warning("Model not found — skipping inference: %s", exc)
@@ -255,7 +270,6 @@ async def main() -> None:
 
             # ── Signal generation with expectancy gate (Phase 4) ─────────────
             if phase >= 4 and score_result:
-                latest_close = close_df.iloc[-1]
                 active_tickers = {e.ticker for e in get_active_universe(phase, leverage_ok)}
 
                 # Conviction strategy — productized from REVIEW_2026-05-17 §9/§10 experiments.
@@ -263,11 +277,15 @@ async def main() -> None:
                 #   v1 single-EMA:        n=36  WR 58.33%  Payoff 1.20  Total +12.85%
                 #   v2 + Multi-EMA:       n=33  WR 63.64%  Payoff 1.20  Total +16.60%
                 #   v3 + options regime:  n=20  WR 70.00%  Payoff 1.25  Total +14.37%  🎯
-                strategy_mode = os.environ.get("STRATEGY_MODE", "production_v3")
                 if strategy_mode == "conviction_v1":
-                    spy_close_val = float(close_df["SPY"].iloc[-1]) if "SPY" in close_df.columns else None
-                    spy_sma200_val = (close_df["SPY"].rolling(200).mean().iloc[-1]
-                                  if "SPY" in close_df.columns else None)
+                    # dropna before taking the last value: the raw frame's final
+                    # row held NaN for SPY on some days, which flowed into the
+                    # trend gate as value=NaN -> silent auto-FAIL (seen live
+                    # 2026-06-10: "SPY 추세" gate showed — with threshold null).
+                    _spy = close_df["SPY"].dropna() if "SPY" in close_df.columns else pd.Series(dtype=float)
+                    spy_close_val = float(_spy.iloc[-1]) if len(_spy) else None
+                    spy_sma200_val = (_spy.rolling(200).mean().iloc[-1]
+                                  if len(_spy) >= 200 else None)
                     spy_sma200 = float(spy_sma200_val) if spy_sma200_val is not None and not pd.isna(spy_sma200_val) else None
                     vix_latest = regime.get("vix")
 
@@ -588,6 +606,30 @@ async def main() -> None:
                              pf.get("weights"))
                 except Exception as exc:
                     log.warning("Portfolio compose failed (non-fatal): %s", exc)
+
+                # ── Today's single decision: target blend vs current holdings ──
+                # The ONE instruction the user executes. Diffs today's target
+                # against the last tracker record (what the user holds), so the
+                # telegram/report can lead with "오늘 할 일" instead of making the
+                # user reconcile several parallel recommendation panels.
+                try:
+                    from signals.decision import build_decision
+                    import paper.portfolio_tracker as _pfpaper
+                    if regime.get("portfolio"):
+                        # Same record-date convention as portfolio_tracker.update.
+                        _data_date = pd.Timestamp(_c.index[-1]).normalize()
+                        regime["decision"] = build_decision(
+                            regime["portfolio"], tc,
+                            prev=_pfpaper.last_weights_before(_data_date),
+                            satellite=regime.get("sectorSatellite"),
+                            fear_dip=regime.get("fearDip"),
+                            vix=regime.get("vix"),
+                        )
+                        _d = regime["decision"]
+                        log.info("Decision: %s — %d trade(s), vs holdings of %s",
+                                 _d["stance"], _d["nTrades"], _d.get("prevDate") or "n/a")
+                except Exception as exc:
+                    log.warning("Decision build failed (non-fatal): %s", exc)
 
                 # ── Portfolio NAV paper validation (3-month Tier-2 track) ──────
                 # Forward out-of-sample: record today's blend allocation + the

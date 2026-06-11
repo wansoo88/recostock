@@ -56,6 +56,31 @@ def save(df: pd.DataFrame) -> None:
     df.to_parquet(PATH, index=False)
 
 
+def last_weights_before(date) -> dict | None:
+    """The most recent recorded allocation strictly BEFORE `date` — i.e. what the
+    user should currently be holding when today's run happens. Used by
+    signals.decision to turn today's target into concrete rebalance trades.
+    Excluding `date` itself keeps re-runs of the same day idempotent (the
+    overwritten today-row never diffs against itself).
+
+    Returns {date, weights, cashWeight} or None when no prior record exists.
+    """
+    hist = load()
+    if hist.empty:
+        return None
+    date_str = str(pd.Timestamp(date).date())
+    prior = hist[hist["date"] < date_str].sort_values("date")
+    if prior.empty:
+        return None
+    r = prior.iloc[-1]
+    w = json.loads(r["weights"]) if isinstance(r["weights"], str) else dict(r["weights"])
+    return {
+        "date": str(r["date"]),
+        "weights": {k: float(v) for k, v in w.items()},
+        "cashWeight": float(r.get("cash_weight", 0.0) or 0.0),
+    }
+
+
 def _cash_daily_yield() -> float:
     """Latest short-rate as a daily simple yield. 0 if unavailable.
 

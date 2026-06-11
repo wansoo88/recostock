@@ -145,3 +145,45 @@ def evaluate(close_df: pd.DataFrame) -> dict:
         "weight": SUGGESTED_SATELLITE_WEIGHT,
         "backtest": BACKTEST,
     }
+
+
+def evaluate_weekly(close_df: pd.DataFrame) -> dict:
+    """evaluate() with the PICK pinned to the last Friday close — the validated cadence.
+
+    The backtest that justifies the sleeve (scripts/sweep_blend_goal.py) rebalances
+    on Fridays only and holds the prior pick in between. The daily pipeline used to
+    call evaluate() directly, silently rotating the pick ANY day the RSI order
+    flipped — 4 rotations in the first 6 paper-tracking days (2026-06-02..06-08),
+    each charging turnover cost the backtest never paid. This wrapper restores the
+    weekly cadence statelessly: the pick is recomputed from data truncated at the
+    most recent Friday close (== what a Friday rebalance would have chosen, held
+    since), while `ranked` still reflects today's RSI for display.
+
+    Holiday-Friday edge: if Friday is missing from the index, the truncation lands
+    on the previous week's Friday — identical to the backtest loop, where a skipped
+    Friday simply keeps the existing pick another week.
+    """
+    today_eval = evaluate(close_df)
+    if not today_eval:
+        return today_eval
+
+    idx = close_df.dropna(how="all").index
+    fridays = [d for d in idx if pd.Timestamp(d).dayofweek == 4]
+    if not fridays:
+        # No Friday in history (tiny synthetic frames) — today's pick stands.
+        today_eval["pickAsOf"] = today_eval["asOf"]
+        return today_eval
+
+    last_friday = fridays[-1]
+    if pd.Timestamp(last_friday) == pd.Timestamp(idx[-1]):
+        pinned = today_eval          # today IS the rebalance close
+    else:
+        pinned = evaluate(close_df.loc[:last_friday])
+        if not pinned:
+            pinned = today_eval
+
+    out = dict(today_eval)
+    out["pick"] = pinned.get("pick", [])
+    out["cashHalf"] = pinned.get("cashHalf", 0)
+    out["pickAsOf"] = str(pd.Timestamp(last_friday).date())
+    return out

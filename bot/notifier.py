@@ -3,15 +3,21 @@
 Daily batch: send_daily_signal (GitHub Actions)
 Intraday:   send_intraday_alert, send_eod_close_alert (run_intraday.py local loop)
 
-send_daily_signal message order (reorganized 2026-06-01 for scannability):
-  1. Header   — date + regime summary, then a loud stale-data warning if any.
-  2. ACTION   — today's trend-core blend position (the headline), with per-leg
-                entry/stop lines, then any individual conviction signals.
-  3. OPTIONAL — RSI sector-rotation satellite (a discretionary overlay).
-  4. PAPER    — 검증·실험 group (3-month NAV validation + fear-dip), clearly
-                fenced as non-actionable / not-real-capital.
-  5. CONTEXT  — sector RSI watchlist + conviction reference note.
-  6. Footer   — report link + manual-execution disclaimer.
+send_daily_signal (rewritten 2026-06-11, decision-first):
+  1. Header   — date + data as-of; loud stale-data warning when frozen.
+  2. 오늘 할 일 — the single decision (hold / rebalance trades / all-cash),
+                diffed against the user's current holdings by signals/decision.
+  3. 목표 포트폴리오 — one allocation line + stop levels.
+  4. 근거     — why-bullets (trend / VIX / sleeve), from the decision object.
+  5. ⚡ 참고   — conviction satellite signal, only when one actually fired.
+  6. 🧪 페이퍼 — one-line validation progress (detail lives in the report).
+  7. Footer   — report link + manual-execution disclaimer.
+
+Removed vs the old layout (the "중구난방" cleanup): the regime/exposure/signal-
+count/expectancy header (three different exposure concepts in one message), the
+RSI watchlist line, the satellite "추천 ~15%" line that duplicated sectors
+already inside the blend weights, and the flat ~57% calibrated-probability
+noise. One message, one instruction.
 """
 
 from __future__ import annotations
@@ -20,6 +26,100 @@ import logging
 from datetime import date, datetime
 
 log = logging.getLogger(__name__)
+
+_WEEKDAY_KO = ["월", "화", "수", "목", "금", "토", "일"]
+_PAPER_STATUS_KO = {
+    "warming up": "검증 초기 — 수치는 아직 노이즈",
+    "review": "점검 필요",
+    "PASS": "게이트 통과",
+}
+
+
+def build_daily_message(
+    signals: list,  # list[Signal] — avoid circular import
+    regime: dict,
+    report_url: str,
+    report_date: date,
+) -> str:
+    """Pure message builder — separated from sending for testability."""
+    from signals.decision import format_target_line
+
+    lines = [f"📊 recostock 데일리 · {report_date} ({_WEEKDAY_KO[report_date.weekday()]})"]
+
+    # Stale-data warning leads — the user must never trade on frozen prices.
+    if regime.get("stale"):
+        lines.append(f"⚠️ 데이터 지연: 최신 종가 {regime.get('dataAsOf')} "
+                     f"({regime.get('staleDays')}일 전) — 오늘 지시를 따르지 말고 파이프라인 확인")
+    elif regime.get("dataAsOf"):
+        lines.append(f"데이터: {regime['dataAsOf']} 종가 기준")
+
+    d = regime.get("decision") or {}
+    tc = regime.get("trendCore") or {}
+    pf = regime.get("portfolio") or {}
+
+    # ── 1. 오늘 할 일 — the single instruction ────────────────────────────────
+    if d:
+        icon = {"hold": "✅", "rebalance": "🔄", "all_cash": "🚨", "start": "🆕"}.get(d.get("stance"), "📌")
+        lines += ["", f"{icon} {d.get('headline', '')}"]
+        for t in d.get("trades", []):
+            lev = " (3x)" if t["ticker"] in ("SPXL", "TQQQ") else ""
+            lines.append(f"   • {t['ticker']}{lev}  {t['fromPct']:g}% → {t['toPct']:g}%  ({t['action']})")
+
+    # ── 2. 목표 포트폴리오 + 손절선 ───────────────────────────────────────────
+    target_line = eff = None
+    if d:
+        target_line, eff = format_target_line(d), d.get("effExposure")
+    elif pf.get("weights"):
+        # Fallback when the decision step failed — still show the target.
+        parts = [f"{t} {w*100:.0f}%{' (3x)' if t in ('SPXL', 'TQQQ') else ''}"
+                 for t, w in sorted(pf["weights"].items(), key=lambda kv: -kv[1]) if w > 0.001]
+        if pf.get("cashWeight", 0) > 0.001:
+            parts.append(f"현금/BIL {pf['cashWeight']*100:.0f}%")
+        target_line, eff = (" · ".join(parts) or "현금 100%"), pf.get("effExposure")
+
+    if target_line:
+        eff_s = f" — 시장노출 ≈{eff:.2f}x" if isinstance(eff, (int, float)) else ""
+        lines += ["", f"📐 목표 포트폴리오{eff_s}", f"   {target_line}"]
+        ex = tc.get("exec") or {}
+        stops = []
+        if ex.get("spy"):
+            stops.append(f"SPY 종가 < ${ex['spy']['stop']:.2f} → SPY·SPXL 청산")
+        if ex.get("qqq"):
+            stops.append(f"QQQ 종가 < ${ex['qqq']['stop']:.2f} → QQQ 청산")
+        if stops:
+            lines.append("   └ 손절: " + " / ".join(stops))
+        if ex.get("tiltDaysLeft") is not None:
+            lines.append(f"   └ SPXL 공포 틸트 만료까지 ~{ex['tiltDaysLeft']}일")
+    elif not signals:
+        lines += ["", "오늘 유효 포지션·시그널 없음"]
+
+    # ── 3. 근거 ───────────────────────────────────────────────────────────────
+    if d.get("why"):
+        lines += ["", "💡 근거"]
+        lines += [f"   • {w}" for w in d["why"]]
+
+    # ── 4. conviction 새틀라이트 — 실제 발사 시에만 ───────────────────────────
+    for s in signals or []:
+        lines += ["", (f"⚡ 참고 — conviction 신호: {s.ticker} 진입 ${s.entry:.2f} · "
+                       f"TP ${s.tp:.2f} · SL ${s.sl:.2f} "
+                       f"(홀드아웃 WR {s.winrate*100:.0f}%·n={s.sample_n} 소표본) "
+                       f"— 새틀라이트(참고용), 위 블렌드와 별개")]
+
+    # ── 5. 페이퍼 검증 — 한 줄 (상세는 리포트) ────────────────────────────────
+    pp = regime.get("portfolioPaper") or {}
+    if pp.get("nDays", 0) > 0:
+        status = _PAPER_STATUS_KO.get(pp.get("status"), pp.get("status", ""))
+        lines += ["", (f"🧪 페이퍼 검증(실자본 아님) {pp['nDays']}일/3개월 · "
+                       f"NAV {pp['totalReturn']*100:+.1f}% · Sharpe {pp['annSharpe']:.2f} "
+                       f"(목표 {pp['targetSharpe']:.2f}) · {status}")]
+
+    # ── 6. Footer ─────────────────────────────────────────────────────────────
+    lines.append("")
+    if report_url:
+        lines.append(f"🔗 상세 리포트: {report_url}")
+    lines.append("⚠️ 모든 매매는 본인이 수동 실행 · 참고용이며 투자 권유 아님")
+
+    return "\n".join(lines)
 
 
 async def send_daily_signal(
@@ -37,141 +137,7 @@ async def send_daily_signal(
         return
 
     bot = telegram.Bot(token=bot_token)
-
-    longs = [s.ticker for s in signals if s.direction == "long" and s.leverage == 1]
-    inverses = [s.ticker for s in signals if s.direction == "short" and s.leverage == 1]
-    lev_signals = [s for s in signals if s.leverage > 1]
-
-    avg_exp = sum(s.expectancy for s in signals) / max(len(signals), 1) if signals else 0.0
-    exp_str = f"{avg_exp:+.2%}"
-
-    # ── 1. Header ─────────────────────────────────────────────────────────────
-    lines = [
-        f"📊 [{report_date}] 일일 ETF 시그널",
-        f"레짐: {regime.get('label', 'N/A')} / 노출도 {regime.get('exposure', 1.0):.2f}× "
-        f"/ 시그널 {len(signals)}개 / 종합 기대값 {exp_str}",
-    ]
-    # Stale-data warning — lead with it so the user can't miss frozen prices.
-    if regime.get("stale"):
-        lines.insert(1, f"⚠️ 데이터 지연: 최신 종가 {regime.get('dataAsOf')} "
-                        f"({regime.get('staleDays')}일 전) — 시그널 신뢰 말고 파이프라인 확인")
-
-    # ── 2. 오늘의 포지션 (주력 엔진 · ACTIONABLE) ──────────────────────────────
-    # Lead with the action. When the RSI sector sleeve is blended in, the composed
-    # portfolio is the headline allocation; otherwise the pure engine weights.
-    tc = regime.get("trendCore")
-    pf = regime.get("portfolio") or {}
-    has_position = bool(tc and tc.get("coreOn") is not None)
-    if has_position:
-        boost = " ⚡캄-불 부스트" if tc.get("calmBoost") else ""
-        if pf.get("enabled") and pf.get("weights"):
-            lev = lambda t: " (3x)" if t in ("SPXL", "TQQQ") else ""
-            parts = [f"{t} {w*100:.0f}%{lev(t)}"
-                     for t, w in sorted(pf["weights"].items(), key=lambda kv: -kv[1]) if w > 0.001]
-            if pf.get("cashWeight", 0) > 0.001:
-                parts.append(f"현금/BIL {pf['cashWeight']*100:.0f}%")
-            alloc = " + ".join(parts) if parts else "현금 100%"
-            lines.append(f"📐 오늘의 포지션(주력 블렌드): {alloc} "
-                         f"(≈{pf.get('effExposure',0):.2f}x = 시장 베타 환산){boost}")
-            lines.append(f"   └ 추세코어 {pf.get('coreWeight',0.85)*100:.0f}% + RSI 섹터 슬리브 {pf.get('sleeveWeight',0.15)*100:.0f}%")
-        else:
-            parts = []
-            if tc.get("spyWeight", 0) > 0:  parts.append(f"SPY {tc['spyWeight']*100:.0f}%")
-            if tc.get("spxlWeight", 0) > 0: parts.append(f"SPXL {tc['spxlWeight']*100:.0f}%")
-            if tc.get("qqqWeight", 0) > 0:  parts.append(f"QQQ {tc['qqqWeight']*100:.0f}%")
-            if tc.get("cashWeight", 0) > 0: parts.append(f"현금/BIL {tc['cashWeight']*100:.0f}%")
-            alloc = " + ".join(parts) if parts else "현금 100%"
-            lines.append(f"📐 오늘의 포지션(주력): {alloc} (≈{tc.get('effExposure',0):.2f}x = 시장 베타 환산){boost}")
-        # Per-leg prices and stop-loss levels for execution
-        ex = tc.get("exec") or {}
-        if ex.get("spy"):
-            lines.append(f"   └ SPY 진입 ${ex['spy']['price']:.2f} · 추세 손절선 ${ex['spy']['stop']:.2f} (이 가격 하향이탈 시 청산)")
-        if ex.get("spxl"):
-            d = ex.get("tiltDaysLeft")
-            extra = f"틸트 만료 ~{d}일" if d is not None else "공포매수 트리거 만료 시 청산"
-            lines.append(f"   └ SPXL 진입 ${ex['spxl']['price']:.2f} · {extra}")
-        if ex.get("qqq"):
-            lines.append(f"   └ QQQ 진입 ${ex['qqq']['price']:.2f} · 추세 손절선 ${ex['qqq']['stop']:.2f}")
-
-    # Individual conviction-style signals (rare — the per-name gate seldom fires).
-    if longs:
-        lines.append(f"🟢 LONG: {', '.join(longs)}")
-    if inverses:
-        lines.append(f"🔴 INVERSE: {', '.join(inverses)}")
-    if lev_signals:
-        lev_str = ", ".join(f"{s.ticker} (신뢰도 {s.confidence:.2f})" for s in lev_signals)
-        lines.append(f"⚡ 레버리지: {lev_str}")
-    if not signals and not has_position:
-        lines.append("오늘 유효 시그널 없음")
-
-    # ── 3. 선택 레이어: RSI 섹터 로테이션 (discretionary overlay) ───────────────
-    sat = regime.get("sectorSatellite") or {}
-    if sat.get("ranked"):
-        pick = sat.get("pick") or []
-        wpct = int(round((sat.get("weight", 0.15)) * 100))
-        if pick:
-            extra = f" (+현금 {sat['cashHalf']}칸)" if sat.get("cashHalf") else ""
-            lines.append(f"🛰️ RSI 섹터 로테이션(선택): 이번 주 {' + '.join(pick)}{extra} "
-                         f"— 추세코어 자본의 ~{wpct}%까지 권장")
-        else:
-            lines.append("🛰️ RSI 섹터 로테이션(선택): 상위 섹터 모두 200일선 아래 → 전량 현금")
-
-    # ── 4. 검증·실험 (참고용 · 실자본 아님) ────────────────────────────────────
-    # Group the forward paper validation and the experimental fear-dip together,
-    # fenced so they can't be mistaken for actionable instructions.
-    exp_lines = []
-    pp = regime.get("portfolioPaper") or {}
-    if pp.get("nDays", 0) > 0:
-        gap_s = f"{pp['gap']*100:.0f}%" if pp.get("gap") is not None else "n/a"
-        exp_lines.append(
-            f"   • 3개월 페이퍼 검증(주력 블렌드): {pp['nDays']}일/{pp['months']:.1f}개월 · "
-            f"NAV {pp['totalReturn']*100:+.1f}% · 실현Sharpe {pp['annSharpe']:.2f}"
-            f"(목표 {pp['targetSharpe']:.2f}, 괴리 {gap_s}) · {pp['status']}"
-        )
-    fd = regime.get("fearDip")
-    if fd:
-        if fd.get("isEntry"):
-            pct = fd.get("percentile")
-            pct_s = f"{pct*100:.0f}%" if pct is not None else "—"
-            exp_lines.append(f"   • 공포매수 진입신호 — SPY (공포 백분위 {pct_s}, 10일 보유)")
-        pm = fd.get("paper") or {}
-        n_closed, n_open = pm.get("n", 0), pm.get("open", 0)
-        if n_closed > 0 or n_open > 0:
-            track = (f"   • 공포매수 페이퍼: 청산 {n_closed}건 · 승률 {pm.get('winrate',0)*100:.0f}% "
-                     f"· 누적 {pm.get('total',0)*100:+.1f}% · 보유 {n_open}건")
-            if n_closed >= 5:
-                track += " ← 표본 누적, 검토 시점"
-            exp_lines.append(track)
-    if exp_lines:
-        lines.append("🧪 검증·실험 (참고용 · 실자본 아님)")
-        lines.extend(exp_lines)
-
-    # ── 5. 맥락 참고 (context only) ────────────────────────────────────────────
-    # Sector/core RSI monitor (top 5 by RSI-14). Context watchlist only — the
-    # actionable RSI sectors are already in the 🛰️/📐 lines above. (Replaced the
-    # old confidence-ranked "TOP PICK" block, removed 2026-05-31: it ranked by
-    # model confidence — ~zero cross-sectional skill, Spearman -0.02 — and
-    # referenced tp/sl keys absent from the candidate dict, a latent KeyError.)
-    candidates = regime.get("candidates") or []
-    if candidates:
-        top5 = candidates[:5]  # candidates are RSI-sorted in run_daily
-        wl = ", ".join(f"{c['ticker']} {c['rsi']:.0f}" for c in top5 if c.get("rsi") is not None)
-        if wl:
-            lines.append(f"🧭 섹터·코어 RSI순(관전용): {wl}")
-    # Reference signal — conviction is already reflected in the blend's RSI sector
-    # sleeve, so this is confirmation context, NOT a separate trade instruction
-    # (reframed 2026-05-31; fear-dip is surfaced in the 🧪 group above, not here).
-    ens = regime.get("ensemble")
-    if ens and ens.get("action") == "conviction":
-        lines.append(f"📋 참고: conviction 발사({ens['ticker']}) — 이미 위 블렌드의 RSI 섹터 슬리브에 반영됨 "
-                     f"(별도 매매 불필요, 같은 방향 확인용).")
-
-    # ── 6. Footer ──────────────────────────────────────────────────────────────
-    if report_url:
-        lines.append(f"🔗 상세(적중률·근거·팩터): {report_url}")
-    lines.append("⚠️ 수동 실행 · 진입가 미충족 시 미진입")
-
-    message = "\n".join(lines)
+    message = build_daily_message(signals, regime, report_url, report_date)
     await bot.send_message(chat_id=chat_id, text=message)
     log.info("Telegram sent for %s", report_date)
 
