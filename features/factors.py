@@ -70,7 +70,7 @@ def _zscore(close: pd.Series, window: int) -> pd.Series:
 def _adx_proxy(close: pd.Series, period: int) -> pd.Series:
     """Simplified trend-strength proxy using close price only."""
     momentum = close.diff(period).abs()
-    total_range = close.rolling(period).apply(lambda x: x.max() - x.min(), raw=True)
+    total_range = close.rolling(period).max() - close.rolling(period).min()
     return (momentum / total_range.replace(0, np.nan)).rolling(period).mean()
 
 

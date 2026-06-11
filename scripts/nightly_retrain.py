@@ -1,7 +1,10 @@
 """Nightly retrain of v3 LightGBM model with safety gate.
 
-Runs from GitHub Actions cron (14:00 UTC, Mon–Fri) — well before signal cron
-(20:30 / 21:30 UTC) so the signal pipeline picks up the new weights.
+Runs from GitHub Actions native cron (14:00 UTC Mon–Fri, in practice delayed
+1-3h by GitHub). The daily signal dispatches at 13:00 UTC, BEFORE this runs —
+so weights trained tonight are picked up by the NEXT day's signal run. That
+one-day lag is fine (the model is retrained on 11 years of data) and retrain
+is not time-critical, so native schedule is acceptable here.
 
 Steps:
   1. Fetch latest yfinance data (OHLCV + VIX + macro proxies)
@@ -34,7 +37,6 @@ from pathlib import Path
 # Ensure repo root is on PYTHONPATH when run as a script (matches run_daily.py)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import numpy as np
 import pandas as pd
 
 import config
@@ -47,16 +49,10 @@ from data.collector import (
     load_parquet,
 )
 from data.macro_collector import load_macro_cache
-from data.universe import UNIVERSE_BY_TICKER
-from features.factors import compute_factors
-from features.macro_factors import build_global_macro
+from models.inference_v3 import build_feature_matrix_v3
 from models.train_lgbm_v2 import (
     walk_forward_lgbm_v2,
     build_target_v2,
-    MACRO_KEEP_FEATURES,
-    FACTOR_COLS,
-    RANK_COLS,
-    _CATEGORY_MAP,
 )
 
 logging.basicConfig(
@@ -84,63 +80,12 @@ HISTORY_CSV = Path("data/logs/retrain_history.csv")
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
-
-def _build_feature_matrix(close_df: pd.DataFrame, vix_df: pd.DataFrame,
-                          macro: dict) -> pd.DataFrame:
-    """Same shape as scripts/integrated_backtest_v3.build_feature_matrix_expanded.
-
-    Inlined here so this script does not import a side-effect module."""
-    ticker_factors: dict[str, pd.DataFrame] = {}
-    for t in close_df.columns:
-        close = close_df[t].dropna()
-        if len(close) < 100:
-            continue
-        ticker_factors[t] = compute_factors(close)
-    if not ticker_factors:
-        return pd.DataFrame()
-
-    common_idx = None
-    for f in ticker_factors.values():
-        common_idx = f.index if common_idx is None else common_idx.intersection(f.index)
-
-    rank_mats: dict[str, pd.DataFrame] = {}
-    for col in RANK_COLS:
-        mat = pd.DataFrame({
-            t: ticker_factors[t][col].reindex(common_idx)
-            for t in ticker_factors if col in ticker_factors[t].columns
-        })
-        rank_mats[col] = mat.rank(axis=1, pct=True)
-
-    global_mac = build_global_macro(common_idx, macro)
-    macro_cols = [c for c in MACRO_KEEP_FEATURES if c in global_mac.columns]
-    macro_aligned = global_mac[macro_cols].reindex(common_idx).ffill()
-
-    parts: list[pd.DataFrame] = []
-    for t, f in ticker_factors.items():
-        meta = UNIVERSE_BY_TICKER.get(t)
-        is_inverse = int(meta.inverse) if meta else 0
-        category_code = _CATEGORY_MAP.get(meta.category, 1) if meta else 1
-        sub = f.reindex(common_idx)[FACTOR_COLS].copy()
-        sub["is_inverse"] = is_inverse
-        sub["category_code"] = category_code
-        for col in RANK_COLS:
-            if col in rank_mats and t in rank_mats[col].columns:
-                sub[f"{col}_rank"] = rank_mats[col][t]
-        for col in macro_cols:
-            sub[col] = macro_aligned[col].values
-        sub.index = pd.MultiIndex.from_arrays(
-            [sub.index, [t] * len(sub)], names=["date", "ticker"]
-        )
-        parts.append(sub)
-    features = pd.concat(parts).sort_index()
-
-    if vix_df is not None:
-        vix = vix_df.iloc[:, 0].clip(lower=1)
-        date_idx = features.index.get_level_values("date")
-        features["vix_log"] = date_idx.map(np.log(vix).to_dict())
-        features["vix_chg_1d"] = date_idx.map(vix.pct_change().to_dict())
-
-    return features.dropna()
+# Feature matrix construction is SHARED with inference (models/inference_v3.
+# build_feature_matrix_v3) — train and serve must produce features through one
+# code path. The previous inlined copy here had already drifted: inference
+# gained a causal VIX ffill (so an isolated missing VIX day doesn't drop every
+# ticker's rows) that the training copy never received — a silent train/serve
+# skew. Unified 2026-06-11.
 
 
 def _refresh_data(skip_fetch: bool) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
@@ -236,7 +181,7 @@ def main() -> int:
         return 1
 
     try:
-        X = _build_feature_matrix(close_df, vix_df, macro)
+        X = build_feature_matrix_v3(close_df, vix_df, macro)
         y = build_target_v2(close_df, horizon=5)
         log.info("Feature matrix: %d rows × %d cols", *X.shape)
     except Exception as exc:

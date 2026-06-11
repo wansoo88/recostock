@@ -29,6 +29,7 @@ from data.universe import get_active_universe, UNIVERSE_BY_TICKER
 # v3 production inference: macro features + top-K selection (threshold 0.58)
 # Switched from models.inference (v1) on 2026-05-17 per user approval (option 1).
 from models.inference_v3 import (
+    build_feature_matrix_v3,
     compute_rolling_stats,
     load_proba_history,
     save_proba_history,
@@ -144,6 +145,9 @@ async def main() -> None:
     # ── Phase 3/4: model inference + signal generation ───────────────────────
     signals: list[Signal] = []
     regime: dict = {"label": "neutral", "exposure": 1.0}
+    # Single close-price frame for the whole run — inference, fear-dip/trend-core
+    # and sizing all reuse this instead of re-reading the parquet.
+    close_df: pd.DataFrame | None = None
 
     if phase >= 3:
         raw_path = Path("data/raw/etf_ohlcv.parquet")
@@ -237,9 +241,12 @@ async def main() -> None:
             proba_history = load_proba_history()
 
             # ── Score today + rolling backtest stats ─────────────────────────
+            # Feature matrix is built ONCE and shared — score_today and
+            # compute_rolling_stats consume the identical X by construction.
             try:
-                score_result, raw_proba = score_today(close_df, vix_df, proba_history)
-                rolling_stats = compute_rolling_stats(close_df, vix_df, proba_history)
+                X = build_feature_matrix_v3(close_df, vix_df)
+                score_result, raw_proba = score_today(close_df, vix_df, proba_history, X=X)
+                rolling_stats = compute_rolling_stats(close_df, vix_df, proba_history, X=X)
                 proba_history = _append_and_save(proba_history, raw_proba)
             except FileNotFoundError as exc:
                 log.warning("Model not found — skipping inference: %s", exc)
@@ -535,10 +542,8 @@ async def main() -> None:
         try:
             from signals.fear_dip import evaluate as fear_dip_eval
             import paper.fear_dip_tracker as fdt
-            _raw = Path("data/raw/etf_ohlcv.parquet")
-            if _raw.exists():
-                _o = pd.read_parquet(_raw)
-                _c = _o["Close"] if isinstance(_o.columns, pd.MultiIndex) else _o
+            if close_df is not None:
+                _c = close_df
                 fd_sig = fear_dip_eval(_c)
                 fd_trades = fdt.update(_c, fd_sig, pd.Timestamp(today))
                 fd_metrics = fdt.metrics(fd_trades)
@@ -633,13 +638,10 @@ async def main() -> None:
     if ensemble["action"] != "none":
         try:
             from signals.sizing import position_size_pct
-            _rawp = Path("data/raw/etf_ohlcv.parquet")
-            if _rawp.exists():
-                _od = pd.read_parquet(_rawp)
-                _cd = _od["Close"] if isinstance(_od.columns, pd.MultiIndex) else _od
+            if close_df is not None:
                 tk = ensemble["ticker"]
-                if tk in _cd.columns:
-                    ensemble["sizing"] = position_size_pct(_cd[tk].dropna())
+                if tk in close_df.columns:
+                    ensemble["sizing"] = position_size_pct(close_df[tk].dropna())
         except Exception as exc:
             log.warning("Sizing failed (non-fatal): %s", exc)
     regime["ensemble"] = ensemble

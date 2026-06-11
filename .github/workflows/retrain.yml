@@ -1,7 +1,10 @@
 name: Nightly Retrain (v3)
 
 on:
-  # 14:00 UTC, Mon–Fri — finishes well before signal cron (20:30 / 21:30 UTC)
+  # 14:00 UTC Mon–Fri (native schedule — in practice fires 1-3h late, which is
+  # fine: retrain is not time-critical). The daily signal dispatches at 13:00
+  # UTC, BEFORE this runs, so tonight's weights apply from the NEXT day's
+  # signal. One-day weight lag is accepted by design.
   schedule:
     - cron: "0 14 * * 1-5"
   workflow_dispatch:
@@ -13,6 +16,7 @@ concurrency:
 jobs:
   retrain:
     runs-on: ubuntu-latest
+    timeout-minutes: 30         # normal run ~1 min; a hung fetch must not hold the runner 6h
     permissions:
       contents: write           # commit new weights + retrain_history.csv
 

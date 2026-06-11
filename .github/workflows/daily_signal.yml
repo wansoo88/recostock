@@ -16,6 +16,11 @@ concurrency:
 jobs:
   generate-signal:
     runs-on: ubuntu-latest
+    # Normal run is ~1 min. Without a timeout a hung yfinance call holds the
+    # runner (default 360 min) AND blocks the daily-signal concurrency group —
+    # with only ~30 min between the 13:00 UTC dispatch and the US open (DST),
+    # one hang silently kills the day's signal. Fail fast instead.
+    timeout-minutes: 15
     permissions:
       contents: write           # For git push of signal logs + docs/
 

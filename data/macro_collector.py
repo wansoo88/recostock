@@ -59,26 +59,65 @@ def fetch_macro_series(years: int = config.HISTORY_YEARS,
     """Download all macro proxies. Returns {name: close-price series}.
 
     Each series strictly excludes today's incomplete bar (look-ahead guard).
+
+    One batched yf.download for all symbols (17 sequential per-symbol calls
+    were 17 separate failure/rate-limit points — the SPXL-disappearance class
+    of yfinance flakiness). Symbols missing from the batch are retried
+    individually so a single bad symbol still degrades gracefully.
     """
     end = end_date.date() if end_date else date.today()
     start = end - timedelta(days=years * 365)
     today_ts = pd.Timestamp(end)
 
+    def _finalize(close: pd.Series, name: str) -> pd.Series | None:
+        close = close.dropna()
+        close = close[close.index < today_ts]
+        if close.empty:
+            return None
+        close.name = name
+        return close
+
     out: dict[str, pd.Series] = {}
+    sym_to_name = {sym: name for name, sym in MACRO_TICKERS.items()}
+    try:
+        df = yf.download(list(MACRO_TICKERS.values()), start=str(start),
+                         end=str(end), auto_adjust=True, progress=False,
+                         threads=True)
+        if (not df.empty and isinstance(df.columns, pd.MultiIndex)
+                and "Close" in df.columns.get_level_values(0)):
+            closes = df["Close"]
+            for sym in closes.columns:
+                name = sym_to_name.get(sym)
+                if name is None:
+                    continue
+                s = _finalize(closes[sym], name)
+                if s is not None:
+                    out[name] = s
+                    log.info("macro %s (%s): %d bars [%s → %s]",
+                             name, sym, len(s), s.index.min().date(),
+                             s.index.max().date())
+    except Exception as exc:
+        log.warning("macro batch download failed (%s) — falling back to "
+                    "per-symbol fetch", exc)
+
+    # Per-symbol retry for anything the batch did not return.
     for name, sym in MACRO_TICKERS.items():
+        if name in out:
+            continue
         try:
             df = yf.download(sym, start=str(start), end=str(end),
                              auto_adjust=True, progress=False, threads=False)
             if df.empty:
                 log.warning("macro %s (%s): empty", name, sym)
                 continue
-            close = df["Close"].squeeze()
-            close = close[close.index < today_ts]
-            close.name = name
-            out[name] = close
-            log.info("macro %s (%s): %d bars [%s → %s]",
-                     name, sym, len(close), close.index.min().date(),
-                     close.index.max().date())
+            s = _finalize(df["Close"].squeeze(), name)
+            if s is None:
+                log.warning("macro %s (%s): no usable bars", name, sym)
+                continue
+            out[name] = s
+            log.info("macro %s (%s): %d bars [%s → %s] (retry)",
+                     name, sym, len(s), s.index.min().date(),
+                     s.index.max().date())
         except Exception as exc:
             log.warning("macro %s (%s) failed: %s", name, sym, exc)
     return out

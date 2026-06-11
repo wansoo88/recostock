@@ -173,19 +173,29 @@ def append_today_proba(history: pd.DataFrame, today_proba: pd.Series) -> pd.Data
     today_df.index = pd.DatetimeIndex([
         today_proba.name if today_proba.name else pd.Timestamp.today().normalize()
     ])
-    return pd.concat([history, today_df]).drop_duplicates().tail(PROBA_HISTORY_DAYS)
+    # Dedup by DATE, keeping the latest row. A value-based drop_duplicates()
+    # here would keep BOTH rows when a same-day re-run produces slightly
+    # different probas (data revision), double-weighting that date in the EMA.
+    combined = pd.concat([history, today_df])
+    combined = combined[~combined.index.duplicated(keep="last")]
+    return combined.tail(PROBA_HISTORY_DAYS)
 
 
 def score_today(close_df: pd.DataFrame, vix_df: pd.DataFrame | None,
-                proba_history: pd.DataFrame, top_k: int = TOP_K):
+                proba_history: pd.DataFrame, top_k: int = TOP_K,
+                X: pd.DataFrame | None = None):
     """Same return shape as inference.score_today — adds top-K selection.
 
     Returns (results dict, raw_proba Series).
     results[ticker] = {"raw_proba", "ema_proba", "signal", "rank"}
     signal: +1 only for top_k tickers above SIGNAL_THRESHOLD, else 0.
+
+    X: optional precomputed build_feature_matrix_v3 output — lets the caller
+    build the matrix once and share it with compute_rolling_stats.
     """
     model = _load_model()
-    X = build_feature_matrix_v3(close_df, vix_df)
+    if X is None:
+        X = build_feature_matrix_v3(close_df, vix_df)
     if X.empty:
         return {}, pd.Series(dtype=float)
 
@@ -219,6 +229,7 @@ def score_today(close_df: pd.DataFrame, vix_df: pd.DataFrame | None,
         return float(fallback) if pd.isna(series_val) else float(series_val)
 
     results = {}
+    ranks = ema_proba.rank(ascending=False)
     for ticker in raw_proba.index:
         raw = float(raw_proba[ticker])
         # BUG FIX 2026-05-17: Series.get(ticker, raw) returns NaN if ticker
@@ -228,7 +239,7 @@ def score_today(close_df: pd.DataFrame, vix_df: pd.DataFrame | None,
         ema = _safe_float(ema_proba.get(ticker, raw), raw)
         ema3 = _safe_float(ema_proba_3.get(ticker, raw), raw)
         ema7 = _safe_float(ema_proba_7.get(ticker, raw), raw)
-        rank = ema_proba.rank(ascending=False).get(ticker, np.nan)
+        rank = ranks.get(ticker, np.nan)
         results[ticker] = {
             "raw_proba": round(raw, 4),
             "ema_proba": round(ema, 4),          # EMA-5 (legacy field, used by production_v3)
@@ -243,10 +254,16 @@ def score_today(close_df: pd.DataFrame, vix_df: pd.DataFrame | None,
 # compute_rolling_stats is identical to inference.py's version, since
 # the same Friday-rebalance methodology applies. Production switch can use
 # either module's rolling_stats interchangeably.
-def compute_rolling_stats(close_df, vix_df, proba_history, window=ROLLING_WINDOW):
-    """Per-ETF rolling stats — same algorithm as inference.compute_rolling_stats."""
+def compute_rolling_stats(close_df, vix_df, proba_history, window=ROLLING_WINDOW,
+                          X: pd.DataFrame | None = None):
+    """Per-ETF rolling stats — same algorithm as inference.compute_rolling_stats.
+
+    X: optional precomputed build_feature_matrix_v3 output (shared with
+    score_today by the daily pipeline to avoid building the matrix twice).
+    """
     model = _load_model()
-    X = build_feature_matrix_v3(close_df, vix_df)
+    if X is None:
+        X = build_feature_matrix_v3(close_df, vix_df)
     if X.empty:
         return pd.DataFrame()
 

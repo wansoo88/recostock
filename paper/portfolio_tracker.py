@@ -57,15 +57,27 @@ def save(df: pd.DataFrame) -> None:
 
 
 def _cash_daily_yield() -> float:
-    """Latest 13-week T-bill (IRX) as a daily simple yield. 0 if unavailable."""
-    p = Path("data/raw/macro/irx.parquet")
-    if not p.exists():
-        return 0.0
-    try:
-        s = pd.read_parquet(p).iloc[:, 0].dropna()
-        return float(s.iloc[-1]) / 100.0 / _TRADING_DAYS if len(s) else 0.0
-    except Exception:
-        return 0.0
+    """Latest short-rate as a daily simple yield. 0 if unavailable.
+
+    Primary source is macro/yield_2y.parquet (^IRX, written daily by
+    data.macro_collector) — the SAME cash-leg feed the blend backtest uses
+    (scripts/sweep_blend_goal.load_real), so paper NAV and the backtest target
+    stay comparable. macro/irx.parquet is a stale 2026-05-17 naming leftover
+    kept only as a local fallback; it is NOT committed, so on the Actions
+    runner the old code silently credited cash 0%/day — a systematic drag vs
+    the backtest during cash-heavy regimes.
+    """
+    for p in (Path("data/raw/macro/yield_2y.parquet"),
+              Path("data/raw/macro/irx.parquet")):
+        if not p.exists():
+            continue
+        try:
+            s = pd.read_parquet(p).iloc[:, 0].dropna()
+            if len(s):
+                return float(s.iloc[-1]) / 100.0 / _TRADING_DAYS
+        except Exception:
+            continue
+    return 0.0
 
 
 def update(close_df: pd.DataFrame, portfolio: dict,

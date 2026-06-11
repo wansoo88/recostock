@@ -16,6 +16,7 @@ concurrency:
 jobs:
   sweep:
     runs-on: ubuntu-latest
+    timeout-minutes: 60         # full-history replay sweep; generous but bounded
     permissions:
       contents: write           # commit data/logs/blend_goal_sweep.csv
 
