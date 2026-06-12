@@ -96,7 +96,22 @@ def build_daily_message(
                        f"(홀드아웃 WR {s.winrate*100:.0f}%·n={s.sample_n} 소표본) "
                        f"— 새틀라이트(참고용), 위 블렌드와 별개")]
 
-    # ── 4. Footer — 근거·검증 트랙 등 모든 설명은 리포트에서 ──────────────────
+    # ── 4. Tier-2 만기 알림 — 만기 도달 첫 실행에서 단 한 번 ──────────────────
+    # The message is otherwise instruction-only; this is the one-time decision
+    # milestone (실자본 전환 검토 시점) and must not pass silently.
+    pp = regime.get("portfolioPaper") or {}
+    if pp.get("maturityAlert"):
+        ci = pp.get("sharpeCi")
+        ci_s = f" (95% CI {ci[0]}~{ci[1]})" if ci else ""
+        gap = pp.get("gap")
+        gap_s = f" · 괴리 {gap*100:.0f}%" if gap is not None else ""
+        verdict = "게이트 PASS" if pp.get("passed") else "게이트 미충족"
+        lines += ["", (f"🏁 페이퍼 검증 3개월 만기 도달 — {verdict}. "
+                       f"실현 Sharpe {pp.get('annSharpe', 0):.2f}{ci_s} · "
+                       f"목표 {pp.get('targetSharpe', 0):.2f}{gap_s}. "
+                       f"실자본 전환 여부는 리포트 판정 확인 후 직접 결정하세요")]
+
+    # ── 5. Footer — 근거·검증 트랙 등 모든 설명은 리포트에서 ──────────────────
     lines.append("")
     if report_url:
         lines.append(f"🔗 근거·검증 상세: {report_url}")

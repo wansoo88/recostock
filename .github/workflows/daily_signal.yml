@@ -1,13 +1,17 @@
 name: Daily ETF Signal
 
 on:
-  # Triggered externally via workflow_dispatch by an Ubuntu-server cron at
-  # 22:00 KST (13:00 UTC) Mon-Fri. GitHub's native `schedule` trigger was
-  # removed: it is best-effort and routinely delayed 1-3h or skipped, which
-  # is unacceptable for a signal that must land before the US open. The
-  # external cron POSTs the dispatch API, which queues within seconds.
-  # See scripts/trigger_daily_signal.sh.
+  # PRIMARY: workflow_dispatch fired by the Ubuntu-server cron at 22:00 KST
+  # (13:00 UTC) Mon-Fri — queues within seconds. See trigger_daily_signal.sh.
   workflow_dispatch:
+  # BACKUP ONLY (2026-06-12): native schedule is best-effort (1-3h jitter, can
+  # skip) which is why it was removed as primary — but as a self-healing net
+  # behind the cron it's fine: 늦은 리포트 > 무리포트. run_daily exits
+  # immediately when today's report already exists (BACKUP_RUN guard below),
+  # so on normal days this is a no-op checkout; it only does real work when
+  # the ubuntu server / dispatch chain failed.
+  schedule:
+    - cron: "20 13 * * 1-5"
 
 concurrency:
   group: daily-signal
@@ -38,6 +42,7 @@ jobs:
 
       - name: Run signal pipeline
         env:
+          BACKUP_RUN: ${{ github.event_name == 'schedule' }}
           SYSTEM_PHASE: ${{ vars.SYSTEM_PHASE || '0' }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

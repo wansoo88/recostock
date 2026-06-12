@@ -81,6 +81,13 @@ def _append_and_save(history, raw_proba):
 
 async def main() -> None:
     today = date.today()
+    # Backup-trigger idempotency: the native `schedule` event on daily_signal.yml
+    # is only a safety net behind the ubuntu-cron dispatch (primary, 13:00 UTC).
+    # If today's report is already published this run has nothing to add — exit
+    # before touching data so the user never gets a duplicate telegram.
+    if _env_bool("BACKUP_RUN") and (Path("docs") / f"{today.isoformat()}.html").exists():
+        log.info("Backup run: docs/%s.html already published — exiting", today.isoformat())
+        return
     phase = _env_int("SYSTEM_PHASE", 0)
     leverage_ok = _env_bool("LEVERAGE_EDUCATION_DONE")
     fred_key = os.environ.get("FRED_API_KEY", "")
@@ -669,6 +676,17 @@ async def main() -> None:
                     if regime.get("portfolio"):
                         _pfpaper.update(_c, regime["portfolio"])
                         regime["portfolioPaper"] = _pfpaper.metrics()
+                        # One-time Tier-2 maturity alert: the first run where the
+                        # 3-month window completes flags the telegram so the
+                        # checkpoint day (~2026-08-29) can't pass unnoticed. The
+                        # marker lives in data/paper/ (committed by the workflow)
+                        # so it fires exactly once.
+                        _t2flag = Path("data/paper/tier2_maturity_alerted.flag")
+                        if regime["portfolioPaper"].get("monthsOk") and not _t2flag.exists():
+                            regime["portfolioPaper"]["maturityAlert"] = True
+                            _t2flag.parent.mkdir(parents=True, exist_ok=True)
+                            _t2flag.write_text(str(today), encoding="utf-8")
+                            log.info("Tier-2 paper window MATURED — one-time alert flagged")
                         # NAV chart + per-leg attribution for the report
                         # (display only — additive approximation, labeled).
                         regime["portfolioPaper"]["history"] = _pfpaper.nav_history()

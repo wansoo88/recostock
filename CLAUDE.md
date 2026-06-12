@@ -84,7 +84,7 @@ data/universe.py           — ETFMeta 목록 + Phase별 활성 여부
 
 ## GitHub Actions cron
 
-`daily_signal.yml`은 **`workflow_dispatch` 전용**이다. GitHub native `schedule`은 1~3시간 지연·누락이 잦아(미국 장 시작 전 도착 보장 불가) 제거됐다. 대신 외부 우분투 서버 cron이 매일 13:00 UTC(22:00 KST, 월~금)에 dispatch API를 POST해 트리거한다(`scripts/trigger_daily_signal.sh`). 중복 실행 방지: `concurrency.group: daily-signal`, `cancel-in-progress: false`.
+`daily_signal.yml`의 **주 트리거는 `workflow_dispatch`**다. GitHub native `schedule`은 1~3시간 지연·누락이 잦아(미국 장 시작 전 도착 보장 불가) 주 트리거에서 제거됐고, 외부 우분투 서버 cron이 매일 13:00 UTC(22:00 KST, 월~금)에 dispatch API를 POST해 트리거한다(`scripts/trigger_daily_signal.sh`). **백업(2026-06-12)**: native `schedule 20 13 * * 1-5`가 안전망으로 부활 — `BACKUP_RUN=true`로 실행되며 당일 `docs/<날짜>.html`이 이미 있으면 run_daily가 즉시 종료(중복 텔레그램 방지). 우분투 cron이 죽은 날만 실제로 발행한다. 중복 실행 방지: `concurrency.group: daily-signal`, `cancel-in-progress: false`.
 `sentiment.yml`은 별개로 native `schedule: 0 13 * * 1-5`를 유지한다(v4용 사전수집, 코어 파이프라인 미편입).
 `watchdog.yml`(2026-06-12): 평일 14:30 UTC native schedule 백스톱 — 당일 `docs/<날짜>.html` 미발행 시 텔레그램 경보. 우분투 cron·dispatch·워크플로 실패의 무감지 리스크용이며, native 지터(1~3h)는 "늦은 경보 > 무경보"로 허용.
 
@@ -103,7 +103,8 @@ data/universe.py           — ETFMeta 목록 + Phase별 활성 여부
 - **추세코어** (`signals/trend_core.py`): SPY/QQQ 50/50, VIX<22면 200SMA·≥22면 50&200 골든크로스. 추세-on 시 SPXL 5% 상시, fear-dip 활성 시 15% 틸트, **양쪽 상승+VIX<16(캄-불)이면 SPXL 20% 부스트**(`TREND_CORE_STRONG_SPXL`). 현금 구간 BIL/SGOV(IRX).
 - **RSI 섹터 슬리브** (`signals/sector_rotation.py`): 6개 섹터 RSI-14 상위 2개(200SMA 위 조건)에 자본의 15%(`config.SECTOR_SLEEVE_WEIGHT`). LightGBM은 섹터 횡단면 스킬 0(IC≈0)이라 RSI로 대체. 검증: 블렌드 Full OOS 2021+ +124%/Sharpe1.23, Holdout +59%/1.51 (엔진단독 +114%/1.12 대비 위험조정 개선). **pick은 `evaluate_weekly()`로 마지막 금요일 종가에 고정**(주 1회 교체) — 백테스트(`sweep_blend_goal.py:159`)가 검증한 cadence. 2026-06-11 이전엔 매일 재계산되어 주중 4회 교체·비용 드래그가 발생했음(수정됨). 일간 `evaluate()`를 라이브 pick에 직접 쓰지 말 것.
 - **블렌드 "goal" 노브 재현·상향 조건**: 슬리브/STRONG-SPXL 상향은 ① `scripts/sweep_blend_goal.py`(프로덕션 함수 day-by-day replay, 비용차감·look-ahead-safe) 재현으로 **Tier-1 게이트 PASS** 확인, ② **페이퍼 검증 윈도우(~2026-08-29) 완료 후** — 둘 다 충족 후에만 올린다. (검증 중 가중치 변경은 트래커가 대조하는 하드와이어 목표 `blendFull` Sharpe 1.23을 무효화한다.) 시세 호스트 차단 환경에선 `.github/workflows/blend_goal_sweep.yml`(workflow_dispatch)로 CI 실행. **미재현 수치로 실자본 노브 상향 금지**(부록 B). **재현 결과**(2026-06-01, data~05-29, 출처 `data/logs/blend_goal_sweep.csv`): 출하 0.15/0.20 = Full +121%/1.22·Holdout +58%/1.49 (docstring claim +124%/1.23·+59%/1.51을 ~3% 이내 근사). **0.25는 claim +131%/1.30이 재현 안 됨** → 실제 +124%/1.26·MDD -14%대로 악화. 상위 셀의 Sharpe 이득은 +0.02~0.05로 한계적이며 MDD도 동반 미세 악화(0.20도 Holdout MDD -12.6%→-13.4%, 0.25는 -14%대) → 결정규칙(Sharpe≥출하 AND MDD 불악화)상 **무료 상향 셀 없음**. **현 라이브는 슬리브 15% 유지.**
-- **3개월 페이퍼 검증 중** (`paper/portfolio_tracker.py` NAV추적, ~2026-08-29 만기) — Tier-2 게이트 통과 전 실자본 미전환.
+- **3개월 페이퍼 검증 중** (`paper/portfolio_tracker.py` NAV추적, ~2026-08-29 만기) — Tier-2 게이트 통과 전 실자본 미전환. 만기 도달 첫 실행에서 텔레그램 1회 알림(`data/paper/tier2_maturity_alerted.flag` 마커).
+- **시가 체결 실측 (2026-06-12, `scripts/research_open_execution.py`)**: 모든 백테스트·트래커는 종가 체결 가정이나 실제 실행은 다음날 시가 — 시가 체결 리플레이 시 Full +115%/1.16 (종가 +121%/1.22), Holdout +52%/1.33 (1.49). 게이트는 여전히 통과(주장 생존). 페이퍼 vs 백테스트 괴리 비교는 둘 다 종가 가정이라 정합 유지; **실자본 기대치 인용 시엔 시가 수치를 쓸 것**. 숏 v2 캠페인(12방법 누적 전부 FAIL, `data/logs/short_v2_*.csv`)으로 long-only 확정.
 - **stale-data 가드**: 최신 종가가 4일 초과 지연 시 리포트·텔레그램 경고(`data.collector.data_freshness`).
 - conviction/fear-dip 신호는 새틀라이트(참고용); 외부 우분투 cron이 22:00 KST에 workflow_dispatch 트리거. 메모: [[project_trend_core_engine]], [[project_model_skill_rsi_rotation]], [[project_improvement_loop_0531]].
 

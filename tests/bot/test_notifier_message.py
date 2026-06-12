@@ -127,6 +127,18 @@ def test_stop_alert_line_rendered():
     assert msg.index("오늘 할 일") < msg.index("손절선 근접") < msg.index("목표 포트폴리오")
 
 
+def test_tier2_maturity_alert_one_time_line():
+    reg = _regime()
+    msg = nb.build_daily_message([], reg, "", _DATE)
+    assert "🏁" not in msg                          # absent by default
+    reg["portfolioPaper"].update({"maturityAlert": True, "passed": False,
+                                  "annSharpe": 0.92, "targetSharpe": 1.23,
+                                  "gap": 0.25, "sharpeCi": [-0.9, 2.7]})
+    msg = nb.build_daily_message([], reg, "", _DATE)
+    assert "🏁 페이퍼 검증 3개월 만기 도달 — 게이트 미충족" in msg
+    assert "0.92 (95% CI -0.9~2.7)" in msg and "괴리 25%" in msg
+
+
 def test_footer_link_and_disclaimer():
     msg = nb.build_daily_message([], _regime(), "https://pages/2026-06-10.html", _DATE)
     assert "🔗 근거·검증 상세: https://pages/2026-06-10.html" in msg

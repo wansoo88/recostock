@@ -260,6 +260,7 @@
             엔진 단독 +${(bt.engineFull && bt.engineFull.ret) || 114}%/${(bt.engineFull && bt.engineFull.sharpe) || 1.12} 대비 위험조정(Sharpe) 개선, 낙폭 동등.
             섹터 슬리브 근거: RSI-14 횡단면 IC +${(bt.ic || 0.035).toFixed(3)} (t=${bt.icT || 3.5}) — 이 시스템의 ML 모델은 섹터 변별력이 사실상 0이라 RSI를 사용.
             2022 약세장 −8.2% (SPY −18%). 슬리브 0.25 상향은 재현 백테스트에서 정당성 없음(15% 유지).
+            <strong>시가 체결 실측(2026-06-12)</strong>: 위 수치는 신호일 종가 체결 가정 — 실제처럼 다음날 시가 체결 시 Full +115%/Sharpe 1.16 · Holdout +52%/1.33 (연 −1%p 안팎의 갭 손실). 실자본 기대치는 이 시가 기준을 쓸 것.
           </div>
         </details>
       </div>`;
