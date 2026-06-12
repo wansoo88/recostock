@@ -1,9 +1,10 @@
-"""Regression tests for the telegram daily message (decision-first, 2026-06-11).
+"""Regression tests for the telegram daily message (instruction-only, 2026-06-12).
 
-The message contract: lead with the single decision (오늘 할 일), then the target
-portfolio + stops, then why-bullets. The old scattered surfaces (RSI watchlist,
-duplicate satellite suggestion, regime/expectancy header, flat-57% noise) must
-NOT reappear. build_daily_message is pure, so most tests need no event loop.
+The message contract: the single decision (오늘 할 일) + target portfolio/stops
++ report link — nothing else. Explanatory surfaces (why-bullets, paper progress,
+RSI watchlist, regime/expectancy header, flat-57% noise) live in the report and
+must NOT reappear here. build_daily_message is pure, so most tests need no
+event loop.
 """
 import asyncio
 import types
@@ -82,10 +83,12 @@ def test_target_portfolio_and_stops():
     assert "QQQ 종가 < $621.61 → QQQ 청산" in msg
 
 
-def test_why_bullets_present():
+def test_explanatory_surfaces_live_in_report_not_message():
+    # 2026-06-12: the message is instruction-only — why-bullets and the paper
+    # validation line moved to the report.
     msg = nb.build_daily_message([], _regime(), "", _DATE)
-    assert "💡 근거" in msg
-    assert "추세 ON" in msg and "VIX 18.9" in msg and "XLV·XLK" in msg
+    assert "💡 근거" not in msg
+    assert "🧪 페이퍼 검증" not in msg
 
 
 def test_noise_surfaces_removed():
@@ -111,12 +114,6 @@ def test_conviction_signal_renders_as_reference():
     assert "n=19" in msg and "별개" in msg
 
 
-def test_paper_validation_one_liner():
-    msg = nb.build_daily_message([], _regime(), "", _DATE)
-    assert "🧪 페이퍼 검증(실자본 아님) 8일/3개월" in msg
-    assert "목표 1.23" in msg and "검증 초기" in msg
-
-
 def test_fallback_without_decision_still_shows_target():
     msg = nb.build_daily_message([], _regime(decision=None), "", _DATE)
     assert "📐 목표 포트폴리오" in msg and "QQQ 4" in msg
@@ -130,28 +127,9 @@ def test_stop_alert_line_rendered():
     assert msg.index("오늘 할 일") < msg.index("손절선 근접") < msg.index("목표 포트폴리오")
 
 
-def test_sparkline_in_paper_line():
-    reg = _regime()
-    reg["portfolioPaper"]["history"] = [
-        {"date": f"2026-06-0{i+1}", "nav": v}
-        for i, v in enumerate([1.0, 1.005, 1.012, 0.998, 0.97, 0.977, 0.969, 0.969])]
-    msg = nb.build_daily_message([], reg, "", _DATE)
-    paper_line = next(l for l in msg.splitlines() if l.startswith("🧪"))
-    assert any(ch in paper_line for ch in "▁▂▃▄▅▆▇█")
-
-
-def test_sparkline_unit():
-    assert nb._sparkline([]) == ""
-    assert nb._sparkline([1.0]) == ""
-    assert nb._sparkline([1.0, 1.0, 1.0]) == "▄▄▄"
-    s = nb._sparkline([1.0, 1.1, 0.9, 1.2])
-    assert len(s) == 4 and s[-1] == "█" and "▁" in s
-    assert len(nb._sparkline(list(range(30)))) == 10   # width cap
-
-
 def test_footer_link_and_disclaimer():
     msg = nb.build_daily_message([], _regime(), "https://pages/2026-06-10.html", _DATE)
-    assert "🔗 상세 리포트: https://pages/2026-06-10.html" in msg
+    assert "🔗 근거·검증 상세: https://pages/2026-06-10.html" in msg
     assert "수동 실행" in msg
 
 

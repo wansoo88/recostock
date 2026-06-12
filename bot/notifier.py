@@ -3,21 +3,20 @@
 Daily batch: send_daily_signal (GitHub Actions)
 Intraday:   send_intraday_alert, send_eod_close_alert (run_intraday.py local loop)
 
-send_daily_signal (rewritten 2026-06-11, decision-first):
+send_daily_signal (tightened 2026-06-12 — instruction only):
   1. Header   — date + data as-of; loud stale-data warning when frozen.
   2. 오늘 할 일 — the single decision (hold / rebalance trades / all-cash),
                 diffed against the user's current holdings by signals/decision.
   3. 목표 포트폴리오 — one allocation line + stop levels.
-  4. 근거     — why-bullets (trend / VIX / sleeve), from the decision object.
-  5. ⚡ 참고   — conviction satellite signal, only when one actually fired.
-  6. 🧪 페이퍼 — one-line validation progress (detail lives in the report).
-  7. Footer   — report link + manual-execution disclaimer.
+  4. ⚡ 참고   — conviction satellite signal, only when one actually fired (rare).
+  5. Footer   — report link + manual-execution disclaimer.
 
-Removed vs the old layout (the "중구난방" cleanup): the regime/exposure/signal-
-count/expectancy header (three different exposure concepts in one message), the
-RSI watchlist line, the satellite "추천 ~15%" line that duplicated sectors
-already inside the blend weights, and the flat ~57% calibrated-probability
-noise. One message, one instruction.
+Everything that EXPLAINS rather than INSTRUCTS lives in the report only:
+why-bullets, paper-validation progress/sparkline, monitors, gates. The message
+answers exactly one question — "그래서 오늘 뭘 사고 뭘 팔면 되나" — plus the
+stops needed to execute safely. (Earlier cleanup 2026-06-11 already removed the
+regime/expectancy header, RSI watchlist, duplicate satellite line, and the flat
+~57% calibrated-probability noise — do not reintroduce any of them.)
 """
 
 from __future__ import annotations
@@ -28,24 +27,6 @@ from datetime import date, datetime
 log = logging.getLogger(__name__)
 
 _WEEKDAY_KO = ["월", "화", "수", "목", "금", "토", "일"]
-_PAPER_STATUS_KO = {
-    "warming up": "검증 초기 — 수치는 아직 노이즈",
-    "review": "점검 필요",
-    "PASS": "게이트 통과",
-}
-_SPARK_BLOCKS = "▁▂▃▄▅▆▇█"
-
-
-def _sparkline(values: list[float], width: int = 10) -> str:
-    """Unicode mini-chart of the last `width` values. '' when too short."""
-    vals = [float(v) for v in values][-width:]
-    if len(vals) < 2:
-        return ""
-    lo, hi = min(vals), max(vals)
-    if hi - lo < 1e-12:
-        return "▄" * len(vals)
-    return "".join(_SPARK_BLOCKS[int((v - lo) / (hi - lo) * (len(_SPARK_BLOCKS) - 1))]
-                   for v in vals)
 
 
 def build_daily_message(
@@ -108,32 +89,17 @@ def build_daily_message(
     elif not signals:
         lines += ["", "오늘 유효 포지션·시그널 없음"]
 
-    # ── 3. 근거 ───────────────────────────────────────────────────────────────
-    if d.get("why"):
-        lines += ["", "💡 근거"]
-        lines += [f"   • {w}" for w in d["why"]]
-
-    # ── 4. conviction 새틀라이트 — 실제 발사 시에만 ───────────────────────────
+    # ── 3. conviction 새틀라이트 — 실제 발사 시에만 (드묾) ────────────────────
     for s in signals or []:
         lines += ["", (f"⚡ 참고 — conviction 신호: {s.ticker} 진입 ${s.entry:.2f} · "
                        f"TP ${s.tp:.2f} · SL ${s.sl:.2f} "
                        f"(홀드아웃 WR {s.winrate*100:.0f}%·n={s.sample_n} 소표본) "
                        f"— 새틀라이트(참고용), 위 블렌드와 별개")]
 
-    # ── 5. 페이퍼 검증 — 한 줄 (상세는 리포트) ────────────────────────────────
-    pp = regime.get("portfolioPaper") or {}
-    if pp.get("nDays", 0) > 0:
-        status = _PAPER_STATUS_KO.get(pp.get("status"), pp.get("status", ""))
-        spark = _sparkline([h["nav"] for h in pp.get("history", []) if "nav" in h])
-        spark_s = f" {spark}" if spark else ""
-        lines += ["", (f"🧪 페이퍼 검증(실자본 아님) {pp['nDays']}일/3개월 · "
-                       f"NAV {pp['totalReturn']*100:+.1f}%{spark_s} · Sharpe {pp['annSharpe']:.2f} "
-                       f"(목표 {pp['targetSharpe']:.2f}) · {status}")]
-
-    # ── 6. Footer ─────────────────────────────────────────────────────────────
+    # ── 4. Footer — 근거·검증 트랙 등 모든 설명은 리포트에서 ──────────────────
     lines.append("")
     if report_url:
-        lines.append(f"🔗 상세 리포트: {report_url}")
+        lines.append(f"🔗 근거·검증 상세: {report_url}")
     lines.append("⚠️ 모든 매매는 본인이 수동 실행 · 참고용이며 투자 권유 아님")
 
     return "\n".join(lines)

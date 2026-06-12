@@ -62,6 +62,15 @@ def test_start_without_prior_record():
     assert d["prevDate"] is None
 
 
+def test_prev_source_tagged():
+    # tracker record (no source key) → "tracker"; broker snapshot → "broker"
+    prev = {"date": "2026-06-09", "weights": dict(_BLEND), "cashWeight": 0.0}
+    assert build_decision(_pf(_BLEND), _tc(), prev=prev)["prevSource"] == "tracker"
+    prev["source"] = "broker"
+    assert build_decision(_pf(_BLEND), _tc(), prev=prev)["prevSource"] == "broker"
+    assert build_decision(_pf(_BLEND), _tc(), prev=None)["prevSource"] is None
+
+
 def test_sub_threshold_drift_is_hold():
     prev_w = dict(_BLEND)
     prev_w["SPY"] = _BLEND["SPY"] + REBALANCE_MIN_DELTA * 0.5

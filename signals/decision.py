@@ -54,8 +54,10 @@ def build_decision(portfolio: dict, trend_core: dict | None,
 
     portfolio  : signals.portfolio.compose output (target allocation)
     trend_core : signals.trend_core.evaluate output (for the why-bullets)
-    prev       : {date, weights, cashWeight} — the holdings to diff against
-                 (paper.portfolio_tracker.last_weights_before), or None
+    prev       : {date, weights, cashWeight[, source]} — the holdings to diff
+                 against: broker.reconcile.load_holdings() (실잔고, source=
+                 "broker") when a fresh snapshot exists, else
+                 paper.portfolio_tracker.last_weights_before, or None
     satellite  : signals.sector_rotation.evaluate_weekly output (why-bullets)
     fear_dip   : regime["fearDip"] dict (why-bullets)
     prices     : {ticker: latest close} — passed through (filtered to target
@@ -174,6 +176,7 @@ def build_decision(portfolio: dict, trend_core: dict | None,
         "alerts": alerts,
         "prices": out_prices,
         "prevDate": prev_date,
+        "prevSource": ((prev or {}).get("source") or "tracker") if prev else None,
     }
 
 

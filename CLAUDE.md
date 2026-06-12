@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 미국 인덱스/섹터/레버리지 ETF 당일 방향성 시그널 시스템.  
 GitHub Actions가 매일 배치 실행 → HTML 리포트를 GitHub Pages에 발행 → 텔레그램으로 링크 발송 → **사용자 수동 실행** (토스증권, 한국 브로커, PDT 룰 비적용).
-토스증권 Open API(2026-06 신규, 미국주식 주문 지원)를 통한 자동화는 `REVIEW_2026-06-12_auto_trading.md` 참조 — Tier-2 게이트(~2026-08-29) 통과 전 실자본 자동주문 금지, 그 전엔 읽기 전용(잔고 대조)까지만.
+토스증권 Open API(2026-06 신규, 미국주식 주문 지원)를 통한 자동화는 `REVIEW_2026-06-12_auto_trading.md` 참조 — Tier-2 게이트(~2026-08-29) 통과 전 실자본 자동주문 금지, 그 전엔 읽기 전용(잔고 대조)까지만. 읽기 전용 통합은 `broker/`(2026-06-12 스캐폴딩): 우분투 서버가 `scripts/sync_broker_holdings.py`로 비중-only 스냅샷(`data/broker/holdings.json`)을 커밋 → 파이프라인이 신선하면(≤4일) decision의 '현재 보유'로 사용, 아니면 트래커 기록 폴백. **`broker/`에 주문 코드 추가 금지**(구조적 읽기 전용, `tests/broker/test_toss_readonly.py`가 강제). API 키는 서버 전용 — GH secrets에 두지 않는다. 엔드포인트 경로는 키 승인 후 실응답으로 확정 필요(env로 오버라이드 가능).
 
 ## Commands
 
@@ -80,7 +80,7 @@ data/universe.py           — ETFMeta 목록 + Phase별 활성 여부
 `report/builder.py:_signal_to_dict()` 반환 형태가 HTML 템플릿의 데이터 컨트랙트.  
 변경 시 `report/templates/daily-signal-report-template.html`의 JS 렌더러도 함께 수정.
 
-**Decision contract (2026-06-11):** `signals/decision.py:build_decision()`이 만드는 `regime["decision"]` (stance/headline/trades/why)이 텔레그램(`bot/notifier.py:build_daily_message`)과 리포트 히어로의 1순위 표시 대상. 리포트·텔레그램은 **결정 우선**: ① 오늘 할 일(직전 트래커 기록 대비 리밸런스 diff) ② 목표 포트폴리오+손절 ③ 근거 불릿. 보정승률(~57% 평탄, 변별력 0)은 표시하지 않는다 — 컬럼 부활 금지. `report/builder.py:write_index()`가 docs/index.html(최신 리포트 리다이렉트)을 매 실행 갱신.
+**Decision contract (2026-06-11, 강화 2026-06-12):** `signals/decision.py:build_decision()`이 만드는 `regime["decision"]` (stance/headline/trades/why/prevSource)이 1순위 표시 대상. '현재 보유'는 broker 스냅샷(신선 시) > 트래커 기록 순. **텔레그램은 지시-only**: 오늘 할 일 diff + 목표 포트폴리오 + 손절 + 링크 — 근거 불릿·페이퍼 진행은 리포트 전용(메시지 재추가 금지). 리포트 상단도 히어로+목표만, 검증 트랙은 접힌 참고 섹션. 보정승률(~57% 평탄, 변별력 0)은 어떤 표면에도 표시하지 않는다 — 컬럼 부활 금지, `calWin`/`estEv`는 페이로드에서도 제거됨(2026-06-12). 페이퍼 Sharpe는 95% CI(`sharpeCi`)와 함께 표시(소표본 과신 방지). `report/builder.py:write_index()`가 docs/index.html(최신 리포트 리다이렉트)을 매 실행 갱신.
 
 ## GitHub Actions cron
 

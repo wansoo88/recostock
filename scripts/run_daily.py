@@ -51,7 +51,6 @@ from signals.generator import (
     compute_winrate_ci,
 )
 from signals.conviction import select_conviction_signals
-from signals.calibration import calibrated_winrate as _calibrated_winrate
 from signals.sector_rotation import (
     compute_rsi as _rsi14,
     evaluate_weekly as _sector_satellite,   # pick pinned to Friday close — the
@@ -426,14 +425,13 @@ async def main() -> None:
                         # True conviction gate (drives the regime-gates banner only).
                         passed = (float(e5) >= thr_c and e3 is not None and e7 is not None
                                   and float(e3) >= thr_c and float(e7) >= thr_c)
-                        # Calibrated win prob (isotonic, ~flat ≈57%) — shown to be
-                        # honest, NOT used to rank (it has no discriminating power).
-                        cal_w = _calibrated_winrate(float(e5)) or float(e5)
-                        est_ev = band * (2 * cal_w - 1) - config.TOTAL_COST_ROUNDTRIP
+                        # NO calWin/estEv here: the isotonic calibration is flat
+                        # (~57% for every name — the model can't rank names), so
+                        # per-ETF "win prob" is fake precision. Removed from the
+                        # payload entirely (CLAUDE.md: 컬럼 부활 금지).
                         candidates.append({
                             "ticker": tk, "name": m.name,
                             "confidence": round(float(e5), 4),
-                            "calWin": _calibrated_winrate(float(e5)),
                             "rs": round(rs, 4),
                             "rsi": round(rsi14, 1) if rsi14 == rsi14 else None,
                             "above50": bool(above50), "above200": bool(above200),
@@ -441,7 +439,6 @@ async def main() -> None:
                             "hi": round(px * (1 + band), 2),
                             "lo": round(px * (1 - band), 2),
                             "bandPct": round(band, 4),
-                            "estEv": round(est_ev, 5),
                             "passed": bool(passed),
                         })
                     # Rank by RSI-14 — the IC-validated cross-sectional key
@@ -629,17 +626,36 @@ async def main() -> None:
                             _v = latest_close.get(_tk)
                             if _v is not None and _v == _v and float(_v) > 0:
                                 _prices[_tk] = round(float(_v), 2)
+                        _prev = _pfpaper.last_weights_before(_data_date)
+                        # Real holdings (read-only Toss snapshot, synced by the
+                        # ubuntu server) replace the tracker ASSUMPTION when
+                        # fresh; the broker-vs-tracker drift is reported so a
+                        # missed manual execution surfaces the next morning.
+                        # Absent/stale snapshot → tracker fallback (pre-
+                        # integration behavior, e.g. while key approval pends).
+                        try:
+                            from broker import reconcile as _brk
+                            _bprev = _brk.load_holdings(today=_data_date)
+                            if _bprev:
+                                _dr = _brk.drift(_bprev, _prev)
+                                if _dr:
+                                    regime["brokerReconcile"] = _dr
+                                _prev = _bprev
+                        except Exception as exc:
+                            log.warning("Broker holdings unavailable (non-fatal): %s", exc)
                         regime["decision"] = build_decision(
                             regime["portfolio"], tc,
-                            prev=_pfpaper.last_weights_before(_data_date),
+                            prev=_prev,
                             satellite=regime.get("sectorSatellite"),
                             fear_dip=regime.get("fearDip"),
                             vix=regime.get("vix"),
                             prices=_prices,
                         )
                         _d = regime["decision"]
-                        log.info("Decision: %s — %d trade(s), vs holdings of %s",
-                                 _d["stance"], _d["nTrades"], _d.get("prevDate") or "n/a")
+                        log.info("Decision: %s — %d trade(s), vs %s holdings of %s",
+                                 _d["stance"], _d["nTrades"],
+                                 _d.get("prevSource") or "n/a",
+                                 _d.get("prevDate") or "n/a")
                 except Exception as exc:
                     log.warning("Decision build failed (non-fatal): %s", exc)
 

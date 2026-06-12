@@ -285,6 +285,7 @@ def metrics() -> dict:
         "nDays": n, "months": 0.0, "totalReturn": 0.0, "annReturn": 0.0,
         "annSharpe": 0.0, "mdd": 0.0, "start": None, "last": None,
         "targetSharpe": target, "gap": None,
+        "sharpeCi": None,
         "paceDaily": round(pace_daily, 6), "sigmaDaily": round(sigma_daily, 6),
         "monthsOk": False, "sharpeOk": False, "driftOk": False,
         "passed": False, "status": "no data",
@@ -310,6 +311,17 @@ def metrics() -> dict:
     # claim was lucky/leaked, not a pass. The conviction track instead asks "is
     # the live model at least as good as backtest?", where beating it is fine.
     gap = abs(ann_sharpe - target) / target if target else None
+    # 95% CI on the annualized Sharpe (Lo 2002 asymptotic SE, iid approx):
+    # SE = sqrt((1 + SR_d^2/2) / n) annualized. With ~63 trading days the band
+    # is roughly ±2 Sharpe units — wider than the drift-gate band itself — so
+    # the report shows it to stop anyone over-reading an early review verdict
+    # (honesty principle 3: 표본과 함께만 표시).
+    sharpe_ci = None
+    if len(rets) > 1 and rets.std() > 0:
+        sr_d = float(rets.mean() / rets.std())
+        se_ann = float(np.sqrt((1.0 + 0.5 * sr_d ** 2) / len(rets)) * np.sqrt(_TRADING_DAYS))
+        sharpe_ci = [round(ann_sharpe - 1.96 * se_ann, 2),
+                     round(ann_sharpe + 1.96 * se_ann, 2)]
 
     months_ok = months >= config.TIER2_PAPER_MONTHS_MIN
     sharpe_ok = ann_sharpe >= config.TIER2_PAPER_SHARPE_MIN
@@ -324,6 +336,7 @@ def metrics() -> dict:
         "annSharpe": round(ann_sharpe, 3), "mdd": round(mdd, 4),
         "start": start, "last": last,
         "targetSharpe": round(target, 3), "gap": round(gap, 3) if gap is not None else None,
+        "sharpeCi": sharpe_ci,
         "paceDaily": round(pace_daily, 6), "sigmaDaily": round(sigma_daily, 6),
         "monthsOk": months_ok, "sharpeOk": sharpe_ok, "driftOk": drift_ok,
         "passed": passed, "status": status,

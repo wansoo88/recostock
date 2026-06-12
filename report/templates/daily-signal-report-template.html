@@ -110,10 +110,10 @@
 <div id="decision-hero"></div>
 <div id="portfolio-panel"></div>
 <div id="signal-section"></div>
-<div id="validation-panel"></div>
 
 <details class="ref" id="ref-details">
-  <summary>📚 참고 데이터 — 섹터 모니터 · conviction 게이트 · 구모델 페이퍼 (펼치기)</summary>
+  <summary>📚 참고 — 검증 트랙 · 섹터 모니터 · conviction 게이트 (펼치기)</summary>
+  <div id="validation-panel"></div>
   <div id="monitor-panel"></div>
   <div id="gates-panel"></div>
   <div id="legacy-paper"></div>
@@ -189,7 +189,8 @@
     el.innerHTML = `<div class="hero ${d.stance}">
       <div class="headline">${icon} ${d.headline}</div>
       ${tradesHtml}
-      ${d.prevDate ? `<div class="sub">현재 보유 = ${d.prevDate} 기록 기준 · 비중은 총자본 대비</div>` : ''}
+      ${d.prevDate ? `<div class="sub">현재 보유 = ${d.prevDate} ${d.prevSource === 'broker' ? '실잔고(토스 연동)' : '트래커 기록'} 기준 · 비중은 총자본 대비</div>` : ''}
+      ${reg.brokerReconcile && !reg.brokerReconcile.ok ? `<div class="sub" style="color:var(--amber)">⚠️ 실잔고가 트래커 기록과 최대 ${reg.brokerReconcile.maxDeltaPp}%p 다릅니다 (${(reg.brokerReconcile.perTicker || []).slice(0, 3).map(r => `${r.ticker} ${r.deltaPp > 0 ? '+' : ''}${r.deltaPp}%p`).join(' · ')}) — 직전 지시가 일부 미체결이었을 수 있어 오늘 지시에 반영됨</div>` : ''}
     </div>`;
   })();
 
@@ -423,7 +424,7 @@
           <tbody><tr>
             <td style="color:${pp.totalReturn >= 0 ? 'var(--green)' : 'var(--red)'}">${pctS(pp.totalReturn)}</td>
             <td>${pctS(pp.annReturn)}</td>
-            <td><strong>${pp.annSharpe.toFixed(2)}</strong></td>
+            <td><strong>${pp.annSharpe.toFixed(2)}</strong>${pp.sharpeCi ? `<div style="font-size:10px;color:var(--muted);font-weight:400">95% CI ${pp.sharpeCi[0]}~${pp.sharpeCi[1]}</div>` : ''}</td>
             <td style="color:var(--muted)">${pp.targetSharpe.toFixed(2)}</td>
             <td style="color:var(--red)">${pctS(pp.mdd)}</td>
           </tr></tbody>
@@ -431,7 +432,8 @@
         <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">
           Tier-2 게이트: ${chip(pp.monthsOk, '3개월+')} · ${chip(pp.sharpeOk, 'Sharpe≥0.5')} ·
           ${chip(pp.driftOk, `백테스트 괴리<40%${pp.gap != null ? ` (현재 ${(pp.gap * 100).toFixed(0)}%)` : ''}`)} ·
-          ${pp.start || ''}부터 전향 추적(백필 없음). 짧은 표본의 Sharpe는 노이즈가 크므로 만기 전 수치는 참고용.
+          ${pp.start || ''}부터 전향 추적(백필 없음).
+          ${pp.sharpeCi ? `Sharpe 신뢰구간(${pp.sharpeCi[0]}~${pp.sharpeCi[1]})이 게이트 밴드보다 넓은 동안의 괴리·review 판정은 통계적으로 노이즈일 수 있습니다 — 만기(3개월) 표본으로 판단.` : '짧은 표본의 Sharpe는 노이즈가 크므로 만기 전 수치는 참고용.'}
         </div>
         ${chartHtml}${attrHtml}`;
     }
