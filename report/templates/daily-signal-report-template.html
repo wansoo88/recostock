@@ -112,7 +112,8 @@
 <div id="signal-section"></div>
 
 <details class="ref" id="ref-details">
-  <summary>📚 참고 — 검증 트랙 · 섹터 모니터 · conviction 게이트 (펼치기)</summary>
+  <summary>📚 참고 — 베스트픽 long-shot · 검증 트랙 · 섹터 모니터 · conviction 게이트 (펼치기)</summary>
+  <div id="bestpick-panel"></div>
   <div id="validation-panel"></div>
   <div id="monitor-panel"></div>
   <div id="gates-panel"></div>
@@ -488,6 +489,75 @@
         <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
           슬리브 선택 기준은 <strong>RSI-14 상위 2개 + 200일선 위</strong> (금요일 종가, 주 1회). 모델 확신도·보정승률 컬럼은 제거했습니다 —
           확신도의 종목 변별력이 사실상 0(Spearman −0.02)이라 보정 승률이 전 종목 같은 값으로 평탄하게 나와, 종목 선택에 쓸 정보가 없기 때문입니다. 이 표는 관전용이며 매매 지시가 아닙니다.
+        </div>
+      </div>`;
+  })();
+
+  // ── 5b. 참고: 베스트픽 long-shot (연구 2026-06-24 · 라이브 블렌드와 별개) ───
+  // Concentrated SINGLE-name weekly pick from the expanded universe. Report-only
+  // reference like fear-dip — NOT the live instruction, NOT in telegram, does
+  // not move the paper-tracked blend. Both modes cleared Tier-1; +3%/wk is a
+  // take-profit TARGET, not an expected mean (full disclosure below).
+  (function () {
+    const bp = reg.bestPick || {};
+    const modes = [
+      { key: 'disciplined', label: 'disciplined (안정)', accent: 'var(--green)' },
+      { key: 'longshot',    label: 'longshot (고위험)', accent: 'var(--amber)' },
+    ];
+    const have = modes.filter(m => bp[m.key] && (bp[m.key].ranked || []).length);
+    if (!have.length) return;
+
+    const block = (m) => {
+      const r = bp[m.key] || {};
+      const bt = r.backtest || {};
+      const lev = (r.leverage > 1) ? ` <span style="color:${m.accent}">${r.leverage}x</span>` : '';
+      let head;
+      if (r.pick) {
+        head = `<div style="font-size:15px;font-weight:700;margin:2px 0 4px">
+            ▶ ${r.pick}${lev} <span style="color:var(--muted);font-weight:400;font-size:12px">${r.name || ''}</span></div>
+          <div style="font-size:12.5px;line-height:1.7">
+            진입 <strong>$${(r.entry||0).toFixed(2)}</strong>
+            → 목표(TP +3%) <strong style="color:var(--green)">$${(r.tp||0).toFixed(2)}</strong>
+            · 손절(200일선) <strong style="color:var(--red)">$${(r.stop||0).toFixed(2)}</strong>
+            <span style="color:var(--muted)">(여유 ${r.distStopPct}%)</span></div>
+          ${r.pickAsOf ? `<div style="font-size:11px;color:var(--muted)">선정: ${r.pickAsOf} 금요일 종가 · 주 1회 교체</div>` : ''}`;
+      } else {
+        head = `<div style="font-size:14px;font-weight:600;color:var(--muted);margin:2px 0 4px">▶ 현금 — ${r.note || '후보 없음'}</div>`;
+      }
+      const rows = (r.ranked || []).slice(0, 5).map(x => {
+        const lv = x.leverage > 1 ? `${x.leverage}x` : '';
+        const mark = (r.pick === x.ticker) ? '★ ' : '';
+        return `<tr style="${r.pick === x.ticker ? 'background:rgba(72,187,120,0.10)' : ''}">
+          <td>${mark}<strong>${x.ticker}</strong> <span style="color:var(--muted)">${lv}</span></td>
+          <td>${x.score.toFixed(2)}</td>
+          <td style="color:${x.above200 ? 'var(--green)' : 'var(--red)'}">${x.above200 ? '위' : '아래'} ${x.distStopPct != null ? (x.distStopPct >= 0 ? '+' : '') + x.distStopPct + '%' : ''}</td>
+        </tr>`;
+      }).join('');
+      return `<div style="flex:1 1 280px;min-width:260px;border:1px solid ${m.accent};border-radius:8px;padding:12px 14px">
+        <div style="font-size:12px;color:${m.accent};font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">
+          ${m.label} <span style="color:var(--muted);font-weight:400;text-transform:none">· ${bt.pool || ''}</span></div>
+        ${head}
+        <table class="cand-table" style="margin-top:8px">
+          <thead><tr><th>종목</th><th>점수(${bt.rank || ''})</th><th>200일선</th></tr></thead>
+          <tbody>${rows}</tbody></table>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">
+          검증(비용차감·look-ahead-safe): Full OOS <span class="pos">+${bt.fullRet}%</span>/Shp ${bt.fullSharpe}/MDD ${bt.fullMdd}% ·
+          Holdout +${bt.holdRet}%/${bt.holdSharpe}/${bt.holdMdd}% · 연도양수 ${bt.yearsPositive} · 2022 ${bt.bear2022Pct >= 0 ? '+' : ''}${bt.bear2022Pct}% · 게이트 ${bt.gate}<br>
+          <span style="color:var(--amber)">⚠️ 주간 +3%는 'TP 목표'지 평균 아님 — 실제 평균 +${bt.wkMeanPct}%/주, +3% 마감 주 ~${bt.wkHit3Pct}%, 최악 주 ${bt.wkWorstPct}%</span>
+        </div>
+      </div>`;
+    };
+
+    document.getElementById('bestpick-panel').innerHTML = `
+      <div class="panel" style="border:1px dashed var(--blue);background:transparent">
+        <div class="ttl"><span>🎯 베스트픽 long-shot — 단일 종목 주간 픽 (연구·참고)</span>
+          <span class="overall wait">라이브 아님 · 수동</span></div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap">${have.map(block).join('')}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;border-top:1px solid #14181f;padding-top:8px">
+          확장 유니버스(6섹터 / 6섹터+3x레버리지)에서 매주 RSI·모멘텀 1위 종목 1개를 집중 보유하는 연구 전략입니다.
+          <strong>라이브 블렌드(추세코어 85% + RSI 슬리브 15%)와 별개이며 텔레그램 지시에 포함되지 않습니다</strong> —
+          페이퍼 검증 중이라 실자본 구성은 그대로 유지됩니다. 게이트(SPY 200일선 ON + 픽 200일선 위, 아니면 현금)가 낙폭을 한도 내로 묶는 핵심.
+          실행은 본인 판단·수동. <code>python scripts/run_best_pick.py --live</code>로 최신 픽 재확인 가능.
         </div>
       </div>`;
   })();

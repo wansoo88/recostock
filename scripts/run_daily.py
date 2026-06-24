@@ -615,6 +615,26 @@ async def main() -> None:
                 except Exception as exc:
                     log.warning("Portfolio compose failed (non-fatal): %s", exc)
 
+                # ── Best-pick "long shot" satellite (researched 2026-06-24) ────
+                # A concentrated single-name weekly pick from the expanded
+                # universe (sectors / sectors+3x). REPORT-ONLY reference, like
+                # fear-dip — NOT in the telegram instruction and NOT moving the
+                # live blend (frozen during paper validation). Both gated modes
+                # cleared Tier-1 in scripts/research_best_pick.py; +3%/wk is a
+                # take-profit target, not an expected mean (see signals.best_pick).
+                try:
+                    from signals import best_pick as _bestpick
+                    regime["bestPick"] = {
+                        m: _bestpick.select_weekly(_c, m)
+                        for m in ("disciplined", "longshot")
+                    }
+                    _bp = regime["bestPick"]["disciplined"]
+                    log.info("Best-pick(satellite): disciplined=%s longshot=%s",
+                             _bp.get("pick") or "cash",
+                             regime["bestPick"]["longshot"].get("pick") or "cash")
+                except Exception as exc:
+                    log.warning("Best-pick eval failed (non-fatal): %s", exc)
+
                 # ── Today's single decision: target blend vs current holdings ──
                 # The ONE instruction the user executes. Diffs today's target
                 # against the last tracker record (what the user holds), so the
