@@ -1,0 +1,1493 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>recostock 데일리 리포트</title>
+<style>
+  :root { --bg: #0f1117; --surface: #1a202c; --border: #2d3748; --text: #e2e8f0; --muted: #718096; --green: #48bb78; --red: #fc8181; --amber: #f6ad55; --blue: #63b3ed; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+  h1 { color: var(--blue); font-size: 22px; margin-bottom: 4px; }
+  .date { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+
+  /* HERO — 오늘 할 일 (decision-first, 2026-06-11) */
+  .hero { background: var(--surface); border-radius: 12px; border-left: 6px solid var(--green); padding: 18px 20px; margin-bottom: 16px; }
+  .hero.rebalance { border-left-color: var(--amber); }
+  .hero.all_cash  { border-left-color: var(--red); }
+  .hero.start     { border-left-color: var(--blue); }
+  .hero .headline { font-size: 20px; font-weight: 800; line-height: 1.4; }
+  .hero .sub { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+  .panel { background: var(--surface); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+  .panel .ttl { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+  .panel .ttl .overall { font-size: 12px; }
+  .overall.pass { color: var(--green); } .overall.fail { color: var(--red); } .overall.wait { color: var(--amber); }
+
+  .why-list { list-style: none; margin-top: 10px; }
+  .why-list li { font-size: 13px; padding: 4px 0 4px 18px; position: relative; color: var(--text); }
+  .why-list li::before { content: '•'; position: absolute; left: 4px; color: var(--blue); }
+
+  /* Allocation bar */
+  .alloc-bar { display: flex; height: 18px; border-radius: 5px; overflow: hidden; margin: 8px 0 6px; background: #14181f; }
+  .alloc-seg { height: 100%; }
+  .alloc-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .alloc-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .alloc-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+  /* Tables */
+  .cand-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .cand-table th { text-align: right; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .cand-table th:first-child, .cand-table th:nth-child(2) { text-align: left; }
+  .cand-table td { padding: 6px 8px; border-bottom: 1px solid #14181f; text-align: right; font-variant-numeric: tabular-nums; }
+  .cand-table td:first-child, .cand-table td:nth-child(2) { text-align: left; }
+  .cand-table tr:last-child td { border-bottom: none; }
+  .rsi-bar { background: #14181f; border-radius: 3px; height: 5px; margin-top: 3px; width: 46px; }
+  .rsi-fill { height: 100%; border-radius: 3px; }
+
+  /* Conviction gates (reference section) */
+  .gate-row { display: grid; grid-template-columns: 130px 1fr 90px 30px; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid #14181f; font-size: 12px; }
+  .gate-row:last-child { border-bottom: none; }
+  .gate-name { font-weight: 600; color: var(--text); }
+  .gate-desc { color: var(--muted); font-size: 11px; }
+  .gate-val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .gate-val .thr { font-size: 11px; color: var(--muted); font-weight: 400; }
+  .gate-badge { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; }
+  .gate-pass { background: rgba(72, 187, 120, 0.18); color: var(--green); }
+  .gate-fail { background: rgba(252, 129, 129, 0.18); color: var(--red); }
+
+  /* Conviction signal cards (rare satellite fire) */
+  .section-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 24px 0 10px; }
+  .signal-card { background: var(--surface); border-radius: 10px; padding: 16px; margin-bottom: 12px; border-left: 4px solid var(--green); }
+  .signal-card.inverse { border-left-color: var(--red); }
+  .signal-card.leverage { border-left-color: var(--amber); }
+  .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .ticker { font-size: 22px; font-weight: 700; }
+  .etf-name { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .dir-badge { font-size: 12px; padding: 3px 10px; border-radius: 5px; font-weight: 600; white-space: nowrap; }
+  .long-badge { background: #276749; color: #9ae6b4; }
+  .short-badge { background: #742a2a; color: #fc8181; }
+  .lev-badge { background: #7b4f12; color: #fbd38d; }
+  .levels { display: flex; gap: 24px; margin-bottom: 12px; }
+  .level .lbl { font-size: 11px; color: var(--muted); }
+  .level .val { font-size: 17px; font-weight: 600; margin-top: 2px; }
+  .stats { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  .stats strong { color: var(--text); }
+  .factors { margin-top: 8px; }
+  .factor-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 12px; color: var(--muted); }
+  .factor-name { width: 110px; flex-shrink: 0; }
+  .bar-track { flex: 1; background: var(--border); border-radius: 4px; height: 7px; }
+  .bar-fill { height: 100%; border-radius: 4px; background: var(--blue); }
+  .factor-val { width: 48px; text-align: right; color: var(--text); }
+
+  /* Paper stats (legacy reference) */
+  .paper-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .paper-stat { background: var(--surface); border-radius: 8px; padding: 12px 14px; }
+  .paper-stat .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .paper-stat .val { font-size: 18px; font-weight: 700; margin-top: 3px; }
+  .trade-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .trade-table th { text-align: left; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .trade-table td { padding: 5px 8px; border-bottom: 1px solid #1a202c; }
+  .trade-table tr:last-child td { border-bottom: none; }
+  .pos { color: var(--green); } .neg { color: var(--red); }
+
+  details.ref { margin-top: 24px; border-top: 1px solid var(--border); }
+  details.ref > summary { cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 600; padding: 14px 0 10px; list-style-position: inside; }
+  details.ref > summary:hover { color: var(--text); }
+  details.fineprint { margin-top: 10px; }
+  details.fineprint > summary { cursor: pointer; color: var(--muted); font-size: 11px; }
+  .fineprint-body { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.6; }
+
+  .disclaimer { font-size: 12px; color: #4a5568; margin-top: 36px; border-top: 1px solid var(--border); padding-top: 16px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<h1>📊 recostock 데일리</h1>
+<div class="date" id="rpt-date"></div>
+<div id="freshness-banner"></div>
+
+<div id="decision-hero"></div>
+<div id="portfolio-panel"></div>
+<div id="signal-section"></div>
+
+<details class="ref" id="ref-details">
+  <summary>📚 참고 — 베스트픽 long-shot · 검증 트랙 · 섹터 모니터 · conviction 게이트 (펼치기)</summary>
+  <div id="bestpick-panel"></div>
+  <div id="validation-panel"></div>
+  <div id="monitor-panel"></div>
+  <div id="gates-panel"></div>
+  <div id="legacy-paper"></div>
+</details>
+
+<div class="disclaimer">
+  ⚠️ 이 리포트는 참고용이며 투자 권유가 아닙니다.<br>
+  모든 매매는 사용자가 직접 수동 실행합니다. 진입가 미충족 시 미진입.<br>
+  표시된 성과·백테스트 수치는 비용(왕복 0.25%) 차감 기준이며 미래 수익을 보장하지 않습니다.
+</div>
+
+<script>
+const REPORT = {
+  "date": "2026-07-01",
+  "regime": {
+    "label": "normal",
+    "exposure": 1.0,
+    "dataAsOf": "2026-06-30",
+    "staleDays": 1,
+    "stale": false,
+    "vix": 16.450000762939453,
+    "gates": [
+      {
+        "name": "VIX 절댓값",
+        "value": 16.450000762939453,
+        "threshold": 20.0,
+        "op": "<",
+        "passed": true,
+        "format": ".2f",
+        "desc": "공포지수 (≥20 = 패닉)"
+      },
+      {
+        "name": "SPY 추세",
+        "value": 746.77001953125,
+        "threshold": 687.802409362793,
+        "op": ">",
+        "passed": true,
+        "format": ".2f",
+        "desc": "200일 이동평균 대비"
+      },
+      {
+        "name": "VIX 단기구조",
+        "value": 1.0212765019992955,
+        "threshold": 1.0,
+        "op": "<",
+        "passed": false,
+        "format": ".3f",
+        "desc": "VIX9D/VIX (≥1.0 = backwardation 스트레스)"
+      },
+      {
+        "name": "SKEW z-score",
+        "value": 1.7923918811862143,
+        "threshold": 1.0,
+        "op": "<",
+        "passed": false,
+        "format": "+.2f",
+        "desc": "60일 SKEW 표준화 (≥1.0 = 꼬리리스크↑)"
+      },
+      {
+        "name": "MOVE z-score",
+        "value": -1.066943358683232,
+        "threshold": 1.0,
+        "op": "<",
+        "passed": true,
+        "format": "+.2f",
+        "desc": "60일 채권변동성 (≥1.0 = bond stress)"
+      }
+    ],
+    "strategy": {
+      "version": "conviction_v4",
+      "description": "주간 K=1 + Multi-EMA(3,5,7) + 5-gate regime + 고정 TP3%/SL1%",
+      "holdout_wr": 0.7368,
+      "holdout_n": 19,
+      "full_wr": 0.613,
+      "full_n": 31
+    },
+    "candidates": [
+      {
+        "ticker": "DIA",
+        "name": "SPDR Dow Jones",
+        "confidence": 0.6955,
+        "rs": 0.0927,
+        "rsi": 65.3,
+        "above50": true,
+        "above200": true,
+        "entry": 522.39,
+        "hi": 533.2,
+        "lo": 511.58,
+        "bandPct": 0.0207,
+        "passed": true
+      },
+      {
+        "ticker": "XLF",
+        "name": "Financial Select",
+        "confidence": 0.6729,
+        "rs": 0.0777,
+        "rsi": 65.1,
+        "above50": true,
+        "above200": true,
+        "entry": 53.61,
+        "hi": 54.69,
+        "lo": 52.53,
+        "bandPct": 0.0201,
+        "passed": true
+      },
+      {
+        "ticker": "XLI",
+        "name": "Industrial Select",
+        "confidence": 0.6459,
+        "rs": 0.1291,
+        "rsi": 64.2,
+        "above50": true,
+        "above200": true,
+        "entry": 185.23,
+        "hi": 191.48,
+        "lo": 178.98,
+        "bandPct": 0.0337,
+        "passed": false
+      },
+      {
+        "ticker": "XLV",
+        "name": "Health Care Select",
+        "confidence": 0.6263,
+        "rs": 0.0871,
+        "rsi": 60.9,
+        "above50": true,
+        "above200": true,
+        "entry": 158.66,
+        "hi": 163.24,
+        "lo": 154.08,
+        "bandPct": 0.0289,
+        "passed": false
+      },
+      {
+        "ticker": "XLK",
+        "name": "Technology Select",
+        "confidence": 0.6311,
+        "rs": 0.2473,
+        "rsi": 59.0,
+        "above50": true,
+        "above200": true,
+        "entry": 190.52,
+        "hi": 202.24,
+        "lo": 178.8,
+        "bandPct": 0.0615,
+        "passed": false
+      },
+      {
+        "ticker": "QQQ",
+        "name": "Invesco QQQ",
+        "confidence": 0.6754,
+        "rs": 0.1595,
+        "rsi": 58.2,
+        "above50": true,
+        "above200": true,
+        "entry": 736.4,
+        "hi": 771.54,
+        "lo": 701.26,
+        "bandPct": 0.0477,
+        "passed": true
+      },
+      {
+        "ticker": "SPY",
+        "name": "SPDR S&P 500",
+        "confidence": 0.6993,
+        "rs": 0.0872,
+        "rsi": 55.8,
+        "above50": true,
+        "above200": true,
+        "entry": 746.77,
+        "hi": 766.01,
+        "lo": 727.53,
+        "bandPct": 0.0258,
+        "passed": true
+      },
+      {
+        "ticker": "XLY",
+        "name": "Consumer Disc Select",
+        "confidence": 0.7092,
+        "rs": 0.0422,
+        "rsi": 53.7,
+        "above50": false,
+        "above200": true,
+        "entry": 117.28,
+        "hi": 121.15,
+        "lo": 113.41,
+        "bandPct": 0.033,
+        "passed": true
+      },
+      {
+        "ticker": "XLE",
+        "name": "Energy Select",
+        "confidence": 0.7962,
+        "rs": -0.0932,
+        "rsi": 29.9,
+        "above50": false,
+        "above200": true,
+        "entry": 53.11,
+        "hi": 54.79,
+        "lo": 51.43,
+        "bandPct": 0.0317,
+        "passed": true
+      }
+    ],
+    "candidateThreshold": 0.65,
+    "sectorSatellite": {
+      "ranked": [
+        {
+          "ticker": "XLF",
+          "name": "Financials",
+          "rsi": 65.1,
+          "price": 53.61,
+          "sma200": 52.13,
+          "above200": true,
+          "dist200Pct": 2.8
+        },
+        {
+          "ticker": "XLI",
+          "name": "Industrials",
+          "rsi": 64.2,
+          "price": 185.23,
+          "sma200": 163.33,
+          "above200": true,
+          "dist200Pct": 13.4
+        },
+        {
+          "ticker": "XLV",
+          "name": "Health Care",
+          "rsi": 60.9,
+          "price": 158.66,
+          "sma200": 148.71,
+          "above200": true,
+          "dist200Pct": 6.7
+        },
+        {
+          "ticker": "XLK",
+          "name": "Technology",
+          "rsi": 59.0,
+          "price": 190.52,
+          "sma200": 150.8,
+          "above200": true,
+          "dist200Pct": 26.3
+        },
+        {
+          "ticker": "XLY",
+          "name": "Consumer Disc",
+          "rsi": 53.7,
+          "price": 117.28,
+          "sma200": 117.1,
+          "above200": true,
+          "dist200Pct": 0.2
+        },
+        {
+          "ticker": "XLE",
+          "name": "Energy",
+          "rsi": 29.9,
+          "price": 53.11,
+          "sma200": 50.55,
+          "above200": true,
+          "dist200Pct": 5.1
+        }
+      ],
+      "pick": [
+        "XLV",
+        "XLF"
+      ],
+      "topK": 2,
+      "cashHalf": 0,
+      "asOf": "2026-06-30",
+      "weight": 0.15,
+      "backtest": {
+        "engineFull": {
+          "ret": 114,
+          "sharpe": 1.12,
+          "mdd": -14
+        },
+        "engineHoldout": {
+          "ret": 59,
+          "sharpe": 1.43,
+          "mdd": -11
+        },
+        "standaloneFull": {
+          "ret": 177,
+          "sharpe": 1.35,
+          "mdd": -22
+        },
+        "standaloneHoldout": {
+          "ret": 59,
+          "sharpe": 1.46,
+          "mdd": -22
+        },
+        "blendFull": {
+          "ret": 124,
+          "sharpe": 1.23,
+          "mdd": -12
+        },
+        "blendHoldout": {
+          "ret": 59,
+          "sharpe": 1.51,
+          "mdd": -12
+        },
+        "ic": 0.035,
+        "icT": 3.5,
+        "blendWeight": 0.15
+      },
+      "pickAsOf": "2026-06-26"
+    },
+    "fearDip": {
+      "isEntry": false,
+      "score": -0.2749657556988792,
+      "threshold": 0.4325957151576054,
+      "percentile": 0.2154,
+      "entry": 746.77001953125,
+      "paper": {
+        "n": 1,
+        "winrate": 0.0,
+        "avg_pnl": -0.00749,
+        "total": -0.0075,
+        "open": 0
+      }
+    },
+    "trendCore": {
+      "coreOn": true,
+      "coreSpyOn": true,
+      "coreQqqOn": true,
+      "trendFilter": "200SMA (저변동)",
+      "calmBoost": false,
+      "price": 746.77,
+      "sma200": 687.8,
+      "distPct": 8.57,
+      "spyWeight": 0.47,
+      "spxlWeight": 0.03,
+      "qqqWeight": 0.5,
+      "cashWeight": 0.0,
+      "effExposure": 1.05,
+      "regime": "dual_uptrend",
+      "note": "양쪽 상승 — SPY 48% + SPXL 2% + QQQ 50%",
+      "exec": {
+        "spy": {
+          "price": 746.77,
+          "stop": 687.8
+        },
+        "spxl": {
+          "price": 270.67
+        },
+        "qqq": {
+          "price": 736.4,
+          "stop": 632.17
+        },
+        "tiltDaysLeft": null
+      }
+    },
+    "portfolio": {
+      "weights": {
+        "SPY": 0.3995,
+        "QQQ": 0.425,
+        "SPXL": 0.0255,
+        "XLV": 0.075,
+        "XLF": 0.075
+      },
+      "cashWeight": 0.0,
+      "effExposure": 1.05,
+      "coreWeight": 0.85,
+      "sleeveWeight": 0.15,
+      "sleeveInvested": 0.15,
+      "pick": [
+        "XLV",
+        "XLF"
+      ],
+      "enabled": true,
+      "note": "추세코어 85% + RSI 섹터 슬리브 15% (XLV + XLF)"
+    },
+    "bestPick": {
+      "disciplined": {
+        "mode": "disciplined",
+        "spyTrendOn": true,
+        "ranked": [
+          {
+            "ticker": "XLK",
+            "name": "Technology",
+            "leverage": 1,
+            "score": 23.7594,
+            "price": 190.52,
+            "sma200": 150.8,
+            "above200": true,
+            "distStopPct": 26.3
+          },
+          {
+            "ticker": "XLI",
+            "name": "Industrials",
+            "leverage": 1,
+            "score": 8.5846,
+            "price": 185.23,
+            "sma200": 163.33,
+            "above200": true,
+            "distStopPct": 13.4
+          },
+          {
+            "ticker": "XLF",
+            "name": "Financials",
+            "leverage": 1,
+            "score": 5.6059,
+            "price": 53.61,
+            "sma200": 52.13,
+            "above200": true,
+            "distStopPct": 2.8
+          },
+          {
+            "ticker": "XLV",
+            "name": "Health Care",
+            "leverage": 1,
+            "score": 5.2094,
+            "price": 158.66,
+            "sma200": 148.71,
+            "above200": true,
+            "distStopPct": 6.7
+          },
+          {
+            "ticker": "XLY",
+            "name": "Consumer Disc",
+            "leverage": 1,
+            "score": 4.6473,
+            "price": 117.28,
+            "sma200": 117.1,
+            "above200": true,
+            "distStopPct": 0.2
+          },
+          {
+            "ticker": "XLE",
+            "name": "Energy",
+            "leverage": 1,
+            "score": -2.9044,
+            "price": 53.11,
+            "sma200": 50.55,
+            "above200": true,
+            "distStopPct": 5.1
+          }
+        ],
+        "asOf": "2026-06-30",
+        "target": 0.03,
+        "backtest": {
+          "pool": "6 섹터",
+          "rank": "RSI-14 × 60일 모멘텀",
+          "fullRet": 182,
+          "fullSharpe": 1.15,
+          "fullMdd": -19,
+          "holdRet": 72,
+          "holdSharpe": 1.41,
+          "holdMdd": -17,
+          "wkMeanPct": 0.4,
+          "wkHit3Pct": 14,
+          "wkWorstPct": -7.5,
+          "yearsPositive": "6/6",
+          "bear2022Pct": 4.8,
+          "gate": "PASS"
+        },
+        "reality": {
+          "target": 0.03,
+          "note": "주간 +3%는 '목표(TP)'지 기대 평균이 아니다. 검증된 두 모드의 실제 주간 평균은 +0.4~0.5%이고, +3% 이상으로 마감하는 주는 약 14%(7주 중 1주). 나머지 주는 0 근방 또는 손실(최악 주 disciplined -7.5% / longshot -18.2%)."
+        },
+        "pick": "XLK",
+        "name": "Technology",
+        "leverage": 1,
+        "score": 18.5699,
+        "entry": 181.11,
+        "tp": 186.54,
+        "stop": 150.27,
+        "distStopPct": 20.5,
+        "note": "XLK 단일 베스트픽 — 진입 $181.11 · 목표(TP) +3% $186.54 · 손절 200일선 $150.27",
+        "pickAsOf": "2026-06-26"
+      },
+      "longshot": {
+        "mode": "longshot",
+        "spyTrendOn": true,
+        "ranked": [
+          {
+            "ticker": "XLF",
+            "name": "Financials",
+            "leverage": 1,
+            "score": 65.0599,
+            "price": 53.61,
+            "sma200": 52.13,
+            "above200": true,
+            "distStopPct": 2.8
+          },
+          {
+            "ticker": "XLI",
+            "name": "Industrials",
+            "leverage": 1,
+            "score": 64.1502,
+            "price": 185.23,
+            "sma200": 163.33,
+            "above200": true,
+            "distStopPct": 13.4
+          },
+          {
+            "ticker": "XLV",
+            "name": "Health Care",
+            "leverage": 1,
+            "score": 60.9414,
+            "price": 158.66,
+            "sma200": 148.71,
+            "above200": true,
+            "distStopPct": 6.7
+          },
+          {
+            "ticker": "XLK",
+            "name": "Technology",
+            "leverage": 1,
+            "score": 59.0068,
+            "price": 190.52,
+            "sma200": 150.8,
+            "above200": true,
+            "distStopPct": 26.3
+          },
+          {
+            "ticker": "SOXL",
+            "name": "Semiconductor Bull 3x",
+            "leverage": 3,
+            "score": 57.8137,
+            "price": 266.71,
+            "sma200": 85.36,
+            "above200": true,
+            "distStopPct": 212.4
+          },
+          {
+            "ticker": "QLD",
+            "name": "Ultra QQQ 2x",
+            "leverage": 2,
+            "score": 57.3796,
+            "price": 96.76,
+            "sma200": 74.49,
+            "above200": true,
+            "distStopPct": 29.9
+          },
+          {
+            "ticker": "TQQQ",
+            "name": "UltraPro QQQ 3x",
+            "leverage": 3,
+            "score": 56.5397,
+            "price": 81.0,
+            "sma200": 57.18,
+            "above200": true,
+            "distStopPct": 41.7
+          },
+          {
+            "ticker": "SPXL",
+            "name": "S&P500 Bull 3x",
+            "leverage": 3,
+            "score": 54.2993,
+            "price": 270.67,
+            "sma200": 226.21,
+            "above200": true,
+            "distStopPct": 19.7
+          },
+          {
+            "ticker": "XLY",
+            "name": "Consumer Disc",
+            "leverage": 1,
+            "score": 53.676,
+            "price": 117.28,
+            "sma200": 117.1,
+            "above200": true,
+            "distStopPct": 0.2
+          },
+          {
+            "ticker": "XLE",
+            "name": "Energy",
+            "leverage": 1,
+            "score": 29.8917,
+            "price": 53.11,
+            "sma200": 50.55,
+            "above200": true,
+            "distStopPct": 5.1
+          }
+        ],
+        "asOf": "2026-06-30",
+        "target": 0.03,
+        "backtest": {
+          "pool": "6 섹터 + 3x 레버리지(TQQQ/SOXL/SPXL/QLD)",
+          "rank": "RSI-14",
+          "fullRet": 217,
+          "fullSharpe": 0.86,
+          "fullMdd": -25,
+          "holdRet": 165,
+          "holdSharpe": 1.41,
+          "holdMdd": -22,
+          "wkMeanPct": 0.47,
+          "wkHit3Pct": 14,
+          "wkWorstPct": -18.2,
+          "yearsPositive": "4/6",
+          "bear2022Pct": -11.6,
+          "gate": "PASS (MDD가 -25% 한도에 밀착 — 취약)"
+        },
+        "reality": {
+          "target": 0.03,
+          "note": "주간 +3%는 '목표(TP)'지 기대 평균이 아니다. 검증된 두 모드의 실제 주간 평균은 +0.4~0.5%이고, +3% 이상으로 마감하는 주는 약 14%(7주 중 1주). 나머지 주는 0 근방 또는 손실(최악 주 disciplined -7.5% / longshot -18.2%)."
+        },
+        "pick": "XLV",
+        "name": "Health Care",
+        "leverage": 1,
+        "score": 68.5382,
+        "entry": 160.34,
+        "tp": 165.15,
+        "stop": 148.48,
+        "distStopPct": 8.0,
+        "note": "XLV 단일 베스트픽 — 진입 $160.34 · 목표(TP) +3% $165.15 · 손절 200일선 $148.48",
+        "pickAsOf": "2026-06-26"
+      }
+    },
+    "decision": {
+      "stance": "hold",
+      "headline": "오늘 할 일: 없음 — 그대로 보유",
+      "trades": [],
+      "nTrades": 0,
+      "targetWeights": {
+        "SPY": 0.3995,
+        "QQQ": 0.425,
+        "SPXL": 0.0255,
+        "XLV": 0.075,
+        "XLF": 0.075
+      },
+      "cashWeight": 0.0,
+      "effExposure": 1.05,
+      "why": [
+        "추세 ON — SPY·QQQ 모두 200일선 위 (SPY 200일선 대비 +8.6%)",
+        "VIX 16.5 — 평시 구성 (SPXL 기본 5%)",
+        "섹터 슬리브 15%: XLV·XLF — RSI-14 상위 (2026-06-26 금요일 종가 선정), 주 1회 교체",
+        "참고: 오늘 기준 일간 RSI 순위는 XLF·XLI — 금요일 종가로 확정되면 다음 주 교체 가능"
+      ],
+      "alerts": [],
+      "prices": {
+        "SPY": 746.77,
+        "QQQ": 736.4,
+        "SPXL": 270.67,
+        "XLV": 158.66,
+        "XLF": 53.61
+      },
+      "prevDate": "2026-06-29",
+      "prevSource": "tracker"
+    },
+    "portfolioPaper": {
+      "nDays": 22,
+      "months": 1.05,
+      "totalReturn": -0.0119,
+      "annReturn": -0.1337,
+      "annSharpe": -0.526,
+      "mdd": -0.0562,
+      "start": "2026-05-29",
+      "last": "2026-06-30",
+      "targetSharpe": 1.23,
+      "gap": 1.428,
+      "sharpeCi": [
+        -7.32,
+        6.27
+      ],
+      "paceDaily": 0.000593,
+      "sigmaDaily": 0.008249,
+      "monthsOk": false,
+      "sharpeOk": false,
+      "driftOk": false,
+      "passed": false,
+      "status": "warming up",
+      "history": [
+        {
+          "date": "2026-05-29",
+          "nav": 1.0,
+          "net": 0.0
+        },
+        {
+          "date": "2026-06-01",
+          "nav": 1.005027,
+          "net": 0.005027
+        },
+        {
+          "date": "2026-06-02",
+          "nav": 1.007746,
+          "net": 0.002705
+        },
+        {
+          "date": "2026-06-03",
+          "nav": 1.003076,
+          "net": -0.004634
+        },
+        {
+          "date": "2026-06-04",
+          "nav": 1.001698,
+          "net": -0.001374
+        },
+        {
+          "date": "2026-06-05",
+          "nav": 0.9625,
+          "net": -0.039132
+        },
+        {
+          "date": "2026-06-08",
+          "nav": 0.969137,
+          "net": 0.006895
+        },
+        {
+          "date": "2026-06-09",
+          "nav": 0.969137,
+          "net": 0.0
+        },
+        {
+          "date": "2026-06-10",
+          "nav": 0.951072,
+          "net": -0.01864
+        },
+        {
+          "date": "2026-06-11",
+          "nav": 0.972901,
+          "net": 0.022952
+        },
+        {
+          "date": "2026-06-12",
+          "nav": 0.978685,
+          "net": 0.005945
+        },
+        {
+          "date": "2026-06-15",
+          "nav": 0.991752,
+          "net": 0.013351
+        },
+        {
+          "date": "2026-06-16",
+          "nav": 0.9825,
+          "net": -0.009328
+        },
+        {
+          "date": "2026-06-17",
+          "nav": 0.970971,
+          "net": -0.011735
+        },
+        {
+          "date": "2026-06-18",
+          "nav": 0.984784,
+          "net": 0.014227
+        },
+        {
+          "date": "2026-06-22",
+          "nav": 0.983352,
+          "net": -0.001455
+        },
+        {
+          "date": "2026-06-23",
+          "nav": 0.964098,
+          "net": -0.01958
+        },
+        {
+          "date": "2026-06-24",
+          "nav": 0.96244,
+          "net": -0.00172
+        },
+        {
+          "date": "2026-06-25",
+          "nav": 0.967061,
+          "net": 0.004801
+        },
+        {
+          "date": "2026-06-26",
+          "nav": 0.960405,
+          "net": -0.006883
+        },
+        {
+          "date": "2026-06-29",
+          "nav": 0.978564,
+          "net": 0.018908
+        },
+        {
+          "date": "2026-06-30",
+          "nav": 0.988106,
+          "net": 0.009751
+        }
+      ],
+      "attribution": {
+        "engine": -0.0049,
+        "sleeve": -0.00294,
+        "cash": 2e-05,
+        "cost": -0.00103,
+        "total": -0.00886,
+        "days": 21,
+        "approx": true
+      }
+    },
+    "ensemble": {
+      "action": "none",
+      "live": false,
+      "note": "오늘은 두 전략 모두 미발사 — 관망",
+      "backtest": {
+        "combinedTrades": 105,
+        "holdoutSharpe": 2.41,
+        "overlapDays": 0,
+        "fullTotal": 96.1
+      }
+    }
+  },
+  "signals": [],
+  "paper": {
+    "sharpe": 1.5508,
+    "mdd": -0.4105,
+    "total_return": 2.8667,
+    "n_trades": 266,
+    "n_weeks": 154,
+    "winrate": 0.5752,
+    "avg_win": 0.03596,
+    "avg_loss": 0.02897,
+    "payoff": 1.241,
+    "weeks_elapsed": 303
+  },
+  "paperOpen": [
+    {
+      "open_date": "2026-06-26",
+      "ticker": "XLE",
+      "entry_price": 54.09000015258789,
+      "ema_proba": 0.7562,
+      "winrate": 0.737,
+      "payoff": 1.25
+    }
+  ],
+  "gates": [],
+  "strategy": {}
+};
+
+(function () {
+  if (typeof REPORT === 'undefined') {
+    document.getElementById('decision-hero').innerHTML =
+      '<div class="hero all_cash"><div class="headline">데이터 없음 — Actions 파이프라인 확인 필요</div></div>';
+    return;
+  }
+
+  document.getElementById('rpt-date').textContent = REPORT.date;
+
+  const reg = REPORT.regime || {};
+  const d = reg.decision;
+  const tc = reg.trendCore || {};
+  const pf = reg.portfolio || {};
+  const sat = reg.sectorSatellite || {};
+  const pctS = v => (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+
+  // ── Data freshness — loud when stale, quiet as-of line otherwise ───────────
+  (function () {
+    const asOf = reg.dataAsOf;
+    const el = document.getElementById('freshness-banner');
+    if (!el || !asOf) return;
+    if (reg.stale) {
+      el.innerHTML = `<div style="background:rgba(252,129,129,0.15);border:1px solid var(--red);
+        border-radius:8px;padding:10px 14px;margin-bottom:14px;color:var(--red);font-size:13px;font-weight:600">
+        ⚠️ 데이터 지연 경고 — 최신 종가가 <strong>${asOf}</strong> 기준으로 ${reg.staleDays}일 전입니다.
+        데이터 갱신이 멈췄을 수 있으니 <u>오늘 지시를 따르지 말고</u> 파이프라인/yfinance를 확인하세요.</div>`;
+    } else {
+      el.innerHTML = `<div style="color:var(--muted);font-size:12px;margin-bottom:10px">
+        데이터 기준일: <strong style="color:var(--text)">${asOf}</strong>${reg.staleDays > 0 ? ` (${reg.staleDays}일 전 · 정상 범위)` : ' (당일)'}</div>`;
+    }
+  })();
+
+  // ── 1. HERO: 오늘 할 일 — the single instruction ──────────────────────────
+  (function () {
+    const el = document.getElementById('decision-hero');
+    if (!d) {
+      // Decision unavailable (e.g. tracker cold start) — neutral fallback.
+      if (pf.weights || tc.coreOn != null) {
+        el.innerHTML = '<div class="hero"><div class="headline">📌 아래 목표 포트폴리오대로 보유</div>' +
+          '<div class="sub">직전 보유 기록이 없어 변경분 비교는 생략됨</div></div>';
+      }
+      return;
+    }
+    const meta = { hold: '✅', rebalance: '🔄', all_cash: '🚨', start: '🆕' };
+    const icon = meta[d.stance] || '📌';
+    let tradesHtml = '';
+    if ((d.trades || []).length) {
+      const rows = d.trades.map(t => `<tr>
+        <td><strong>${t.ticker}</strong>${(t.ticker === 'SPXL' || t.ticker === 'TQQQ') ? ' <span style="color:var(--amber)">(3x)</span>' : ''}</td>
+        <td>${t.fromPct}%</td>
+        <td style="color:var(--muted)">→</td>
+        <td><strong>${t.toPct}%</strong></td>
+        <td style="color:${t.deltaPct > 0 ? 'var(--green)' : 'var(--red)'}">${t.action} (${t.deltaPct > 0 ? '+' : ''}${t.deltaPct}%p)</td>
+      </tr>`).join('');
+      tradesHtml = `<table class="cand-table" style="margin-top:12px">
+        <thead><tr><th>종목</th><th>현재 보유</th><th></th><th>목표</th><th>지시</th></tr></thead>
+        <tbody>${rows}</tbody></table>`;
+    }
+    el.innerHTML = `<div class="hero ${d.stance}">
+      <div class="headline">${icon} ${d.headline}</div>
+      ${tradesHtml}
+      ${d.prevDate ? `<div class="sub">현재 보유 = ${d.prevDate} ${d.prevSource === 'broker' ? '실잔고(토스 연동)' : '트래커 기록'} 기준 · 비중은 총자본 대비</div>` : ''}
+      ${reg.brokerReconcile && !reg.brokerReconcile.ok ? `<div class="sub" style="color:var(--amber)">⚠️ 실잔고가 트래커 기록과 최대 ${reg.brokerReconcile.maxDeltaPp}%p 다릅니다 (${(reg.brokerReconcile.perTicker || []).slice(0, 3).map(r => `${r.ticker} ${r.deltaPp > 0 ? '+' : ''}${r.deltaPp}%p`).join(' · ')}) — 직전 지시가 일부 미체결이었을 수 있어 오늘 지시에 반영됨</div>` : ''}
+    </div>`;
+  })();
+
+  // ── 2. 목표 포트폴리오 — allocation + stops + why ─────────────────────────
+  (function () {
+    if (!(pf.weights || tc.coreOn != null)) return;
+    const segColor = { SPY: '#63b3ed', QQQ: '#4fd1c5', DIA: '#63b3ed', SPXL: '#f6ad55', TQQQ: '#f6ad55',
+      XLK: '#9f7aea', XLF: '#5a67d8', XLE: '#ed8936', XLV: '#38b2ac', XLY: '#ed64a6', XLI: '#a0aec0' };
+    const blended = !!(pf && pf.enabled);
+    const weights = blended ? (pf.weights || {}) :
+      Object.fromEntries([['SPY', tc.spyWeight || 0], ['SPXL', tc.spxlWeight || 0], ['QQQ', tc.qqqWeight || 0]].filter(([, w]) => w > 0));
+    const cashW = blended ? (pf.cashWeight || 0) : (tc.cashWeight || 0);
+    const effExp = blended ? pf.effExposure : tc.effExposure;
+    const entries = Object.entries(weights).filter(([, w]) => w > 0.001).sort((a, b) => b[1] - a[1]);
+    const lev = t => (t === 'SPXL' || t === 'TQQQ') ? ' (3x)' : '';
+    const allocText = entries.map(([t, w]) => `${t} ${(w * 100).toFixed(1).replace(/\.0$/, '')}%${lev(t)}`).join(' · ')
+      + (cashW > 0.001 ? ` · 현금/BIL ${(cashW * 100).toFixed(0)}%` : '');
+    const segs = entries.map(([t, w]) =>
+        `<div class="alloc-seg" style="width:${(w * 100).toFixed(1)}%;background:${segColor[t] || '#9f7aea'}" title="${t} ${(w * 100).toFixed(0)}%"></div>`).join('')
+      + (cashW > 0.001 ? `<div class="alloc-seg" style="width:${(cashW * 100).toFixed(1)}%;background:#2d3748" title="현금 ${(cashW * 100).toFixed(0)}%"></div>` : '');
+    const legend = entries.map(([t, w]) =>
+        `<span><i style="background:${segColor[t] || '#9f7aea'}"></i>${t} ${(w * 100).toFixed(1).replace(/\.0$/, '')}%${lev(t)}</span>`).join('')
+      + (cashW > 0.001 ? `<span><i style="background:#2d3748"></i>현금 ${(cashW * 100).toFixed(0)}%</span>` : '');
+
+    const ex = tc.exec || {};
+    // 여유 = how far the close sits ABOVE the stop; red under 3% (alert zone).
+    const room = e => {
+      if (!e || !e.stop || e.stop <= 0) return '<td style="color:var(--muted)">—</td>';
+      const r = (e.price / e.stop - 1) * 100;
+      const col = r < 3 ? 'var(--red)' : (r < 5 ? 'var(--amber)' : 'var(--green)');
+      return `<td style="color:${col};font-weight:600">${r >= 0 ? '+' : ''}${r.toFixed(1)}%</td>`;
+    };
+    const stopRows = [];
+    if (ex.spy)  stopRows.push(`<tr><td><strong>SPY</strong> (+SPXL 연동)</td><td>$${ex.spy.price.toFixed(2)}</td><td style="color:var(--red)">$${ex.spy.stop.toFixed(2)}</td>${room(ex.spy)}<td style="color:var(--muted)">종가 이탈 시 SPY·SPXL 청산</td></tr>`);
+    if (ex.qqq)  stopRows.push(`<tr><td><strong>QQQ</strong></td><td>$${ex.qqq.price.toFixed(2)}</td><td style="color:var(--red)">$${ex.qqq.stop.toFixed(2)}</td>${room(ex.qqq)}<td style="color:var(--muted)">종가 이탈 시 QQQ 청산</td></tr>`);
+    if (ex.spxl) stopRows.push(`<tr><td><strong>SPXL</strong> (3x)</td><td>$${ex.spxl.price.toFixed(2)}</td><td style="color:var(--muted)">—</td><td style="color:var(--muted)">—</td><td style="color:var(--muted)">${ex.tiltDaysLeft != null ? `공포 틸트 만료 ~${ex.tiltDaysLeft}일` : 'SPY 추세 손절선 연동'}</td></tr>`);
+    const stopTable = stopRows.length
+      ? `<table class="cand-table" style="margin-top:10px"><thead><tr><th>종목</th><th>현재가</th><th>손절선</th><th>여유</th><th>규칙</th></tr></thead><tbody>${stopRows.join('')}</tbody></table>` : '';
+    const alertBanner = (d && (d.alerts || []).length)
+      ? d.alerts.map(a => `<div style="background:rgba(246,173,85,0.12);border:1px solid var(--amber);border-radius:6px;padding:8px 12px;margin-top:10px;font-size:12px;color:var(--amber);font-weight:600">⚠️ ${a}</div>`).join('')
+      : '';
+
+    const why = (d && d.why || []).map(w => `<li>${w}</li>`).join('');
+    const bt = sat.backtest || {};
+    const boostTag = tc.calmBoost ? ' ⚡캄-불 부스트' : '';
+
+    document.getElementById('portfolio-panel').innerHTML = `
+      <div class="panel" style="border-left:4px solid var(--blue)">
+        <div class="ttl"><span>목표 포트폴리오 — ${blended ? `추세코어 ${((pf.coreWeight || 0.85) * 100).toFixed(0)}% + RSI 섹터 슬리브 ${((pf.sleeveWeight || 0.15) * 100).toFixed(0)}%` : '추세코어 단독'}</span>
+          <span class="overall pass">시장노출 ≈${effExp}x${boostTag}</span></div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:4px">${allocText || '현금 100%'}</div>
+        <div class="alloc-bar">${segs}</div>
+        <div class="alloc-legend">${legend}</div>
+        ${alertBanner}
+        ${stopTable}
+        ${why ? `<ul class="why-list">${why}</ul>` : ''}
+        <div style="font-size:11px;color:var(--muted);margin-top:8px">
+          ⓘ 시장노출 ${effExp}x = SPXL(3배) 환산 포함 베타. 섹터 슬리브는 <strong>금요일 종가 기준 주 1회</strong> 교체 — 평일의 RSI 순위 변동은 다음 금요일까지 반영하지 않습니다.
+        </div>
+        <details class="fineprint" id="calc-details"><summary>🧮 주문 수량 계산기 — 자본 입력 → 종목별 주수</summary>
+          <div id="calc-body" class="fineprint-body"></div>
+        </details>
+        <details class="fineprint"><summary>백테스트 근거 (비용 0.25% 차감 · look-ahead-safe)</summary>
+          <div class="fineprint-body">
+            블렌드(주력) Full OOS 2021+ +${(bt.blendFull && bt.blendFull.ret) || 124}% / Sharpe ${(bt.blendFull && bt.blendFull.sharpe) || 1.23} / MDD ${(bt.blendFull && bt.blendFull.mdd) || -12}% ·
+            Holdout 2024+ +${(bt.blendHoldout && bt.blendHoldout.ret) || 59}% / ${(bt.blendHoldout && bt.blendHoldout.sharpe) || 1.51}.
+            엔진 단독 +${(bt.engineFull && bt.engineFull.ret) || 114}%/${(bt.engineFull && bt.engineFull.sharpe) || 1.12} 대비 위험조정(Sharpe) 개선, 낙폭 동등.
+            섹터 슬리브 근거: RSI-14 횡단면 IC +${(bt.ic || 0.035).toFixed(3)} (t=${bt.icT || 3.5}) — 이 시스템의 ML 모델은 섹터 변별력이 사실상 0이라 RSI를 사용.
+            2022 약세장 −8.2% (SPY −18%). 슬리브 0.25 상향은 재현 백테스트에서 정당성 없음(15% 유지).
+            <strong>시가 체결 실측(2026-06-12)</strong>: 위 수치는 신호일 종가 체결 가정 — 실제처럼 다음날 시가 체결 시 Full +115%/Sharpe 1.16 · Holdout +52%/1.33 (연 −1%p 안팎의 갭 손실). 실자본 기대치는 이 시가 기준을 쓸 것.
+          </div>
+        </details>
+      </div>`;
+  })();
+
+  // ── 2b. 주문 수량 계산기 — 자본 입력 → 종목별 주수 (토스 소수점 거래 기준) ──
+  (function () {
+    const body = document.getElementById('calc-body');
+    const wrap = document.getElementById('calc-details');
+    if (!body || !wrap) return;
+    const prices = (d && d.prices) || {};
+    const tw = (d && d.targetWeights) || {};
+    const rows = Object.entries(tw)
+      .filter(([t, w]) => w > 0.001 && prices[t] > 0)
+      .sort((a, b) => b[1] - a[1]);
+    if (!rows.length) { wrap.style.display = 'none'; return; }
+    let LS; try { LS = window.localStorage; } catch (e) { /* storage blocked */ }
+    LS = LS || { getItem: () => null, setItem: () => {} };
+    const inputCss = 'background:#14181f;border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 8px';
+    body.innerHTML = `
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:6px 0 10px;font-size:12px;color:var(--text)">
+        <label>자본 <input id="calc-cap" type="number" min="0" step="any" style="width:130px;${inputCss}"></label>
+        <select id="calc-cur" style="${inputCss}"><option value="KRW">₩ KRW</option><option value="USD">$ USD</option></select>
+        <label>환율(₩/$) <input id="calc-fx" type="number" min="0" step="any" style="width:90px;${inputCss}"></label>
+      </div>
+      <div id="calc-out"></div>`;
+    const $i = id => document.getElementById(id);
+    $i('calc-cap').value = LS.getItem('recostock_cap') || '';
+    $i('calc-cur').value = LS.getItem('recostock_cur') || 'KRW';
+    $i('calc-fx').value = LS.getItem('recostock_fx') || '1380';
+    function recalc() {
+      const cap = parseFloat($i('calc-cap').value);
+      const fx = parseFloat($i('calc-fx').value) || 1380;
+      const cur = $i('calc-cur').value;
+      LS.setItem('recostock_cap', $i('calc-cap').value);
+      LS.setItem('recostock_cur', cur);
+      LS.setItem('recostock_fx', $i('calc-fx').value);
+      const out = $i('calc-out');
+      if (!(cap > 0)) {
+        out.innerHTML = '<span style="color:var(--muted)">투자 자본을 입력하면 목표 비중대로 종목별 주문 수량을 계산합니다. 입력값은 이 브라우저에만 저장됩니다.</span>';
+        return;
+      }
+      const capUsd = cur === 'KRW' ? cap / fx : cap;
+      const lev = t => (t === 'SPXL' || t === 'TQQQ') ? ' <span style="color:var(--amber)">(3x)</span>' : '';
+      const trs = rows.map(([t, w]) => {
+        const amt = capUsd * w;
+        const sh = amt / prices[t];
+        const krw = cur === 'KRW' ? `<div style="color:var(--muted);font-size:10px">₩${Math.round(amt * fx).toLocaleString()}</div>` : '';
+        return `<tr><td><strong>${t}</strong>${lev(t)}</td><td>${(w * 100).toFixed(1).replace(/\.0$/, '')}%</td>
+          <td>$${amt.toFixed(0)}${krw}</td><td>$${prices[t].toFixed(2)}</td>
+          <td><strong>${sh.toFixed(2)}주</strong></td></tr>`;
+      }).join('');
+      const cashRow = (d.cashWeight || 0) > 0.001
+        ? `<tr><td><strong>현금/BIL</strong></td><td>${(d.cashWeight * 100).toFixed(0)}%</td>
+           <td>$${(capUsd * d.cashWeight).toFixed(0)}</td><td colspan="2" style="color:var(--muted)">BIL/SGOV 파킹 권장</td></tr>` : '';
+      out.innerHTML = `<table class="cand-table">
+        <thead><tr><th>종목</th><th>비중</th><th>금액</th><th>기준가</th><th>주문 수량</th></tr></thead>
+        <tbody>${trs}${cashRow}</tbody></table>
+        <div style="margin-top:6px;color:var(--muted)">기준가 = ${reg.dataAsOf || '최근'} 종가 (소수점 거래 기준). 주문 시점 시세가 다르면 수량을 비례 조정하세요. 환율은 직접 수정 가능합니다.</div>`;
+    }
+    ['calc-cap', 'calc-cur', 'calc-fx'].forEach(id => $i(id).addEventListener('input', recalc));
+    recalc();
+  })();
+
+  // ── 3. ⚡ 참고 신호 — conviction satellite + fear-dip entry (fire-only) ────
+  (function () {
+    const el = document.getElementById('signal-section');
+    const parts = [];
+    const fd = reg.fearDip;
+    if (fd && fd.isEntry) {
+      const p = fd.percentile != null ? (fd.percentile * 100).toFixed(0) + '%' : '—';
+      parts.push(`<div class="panel" style="border-left:4px solid var(--blue)">
+        <div class="ttl"><span>🔵 공포매수 트리거 발동 (실험 · 페이퍼)</span></div>
+        <div style="font-size:13px">공포 백분위 ${p} — SPY 10일 보유 실험 신호. 코어의 SPXL 틸트에 이미 반영되어 있으며 별도 실자본 매매 지시가 아닙니다.</div>
+      </div>`);
+    }
+    if ((REPORT.signals || []).length) {
+      parts.push('<div class="section-title">⚡ 참고 신호 — conviction (새틀라이트 · 블렌드와 별개)</div>');
+      REPORT.signals.forEach(s => parts.push(renderCard(s)));
+    }
+    el.innerHTML = parts.join('');
+  })();
+
+  // ── 4. 🧪 검증 트랙 — blend NAV validation + fear-dip record (one panel) ──
+  (function () {
+    const pp = reg.portfolioPaper;
+    const fd = reg.fearDip || {};
+    const pm = fd.paper || {};
+    if (!(pp && pp.nDays > 0) && !(pm.n > 0 || pm.open > 0)) return;
+    let blendHtml = '';
+    if (pp && pp.nDays > 0) {
+      const monthsBar = Math.min(100, (pp.months / 3) * 100).toFixed(0);
+      const chip = (ok, label) => `<span style="color:${ok ? 'var(--green)' : 'var(--muted)'}">${ok ? '✓' : '○'} ${label}</span>`;
+      const statusColor = pp.status === 'PASS' ? 'var(--green)' : (pp.status === 'review' ? 'var(--amber)' : 'var(--muted)');
+
+      // NAV chart — realized curve vs the backtest pace ±1σ cone. The cone is
+      // an APPROXIMATION (CAGR/Sharpe-implied vol), labeled as such; the real
+      // gate is the 3-month Sharpe check, never this picture.
+      let chartHtml = '';
+      const hist = (pp.history || []).filter(h => h && isFinite(h.nav));
+      if (hist.length >= 2 && pp.paceDaily != null) {
+        const W = 600, H = 190, L = 42, R = 8, T = 10, B = 24;
+        const n = hist.length;
+        const pace = i => Math.pow(1 + pp.paceDaily, i);
+        const sd = pp.sigmaDaily || 0;
+        const up = i => pace(i) * Math.exp(sd * Math.sqrt(i));
+        const dn = i => pace(i) * Math.exp(-sd * Math.sqrt(i));
+        let vmin = 1, vmax = 1;
+        for (let i = 0; i < n; i++) {
+          vmin = Math.min(vmin, hist[i].nav, dn(i));
+          vmax = Math.max(vmax, hist[i].nav, up(i));
+        }
+        const padv = (vmax - vmin) * 0.08 + 1e-9; vmin -= padv; vmax += padv;
+        const X = i => L + i * (W - L - R) / (n - 1);
+        const Y = v => T + (H - T - B) * (1 - (v - vmin) / (vmax - vmin));
+        const seq = f => Array.from({ length: n }, (_, i) => `${X(i).toFixed(1)},${Y(f(i)).toFixed(1)}`).join(' ');
+        const navPts = hist.map((h, i) => `${X(i).toFixed(1)},${Y(h.nav).toFixed(1)}`).join(' ');
+        const coneRev = Array.from({ length: n }, (_, i) => n - 1 - i)
+          .map(i => `${X(i).toFixed(1)},${Y(dn(i)).toFixed(1)}`).join(' ');
+        const pctL = v => ((v - 1) * 100).toFixed(1) + '%';
+        const paceAnnual = ((Math.pow(1 + pp.paceDaily, 252) - 1) * 100).toFixed(0);
+        chartHtml = `
+        <div style="margin-top:12px">
+        <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:#14181f;border-radius:8px" role="img" aria-label="페이퍼 NAV 차트">
+          <polygon points="${seq(up)} ${coneRev}" fill="rgba(113,128,150,0.13)"/>
+          <polyline points="${seq(pace)}" fill="none" stroke="#718096" stroke-width="1.2" stroke-dasharray="5 4"/>
+          <line x1="${L}" y1="${Y(1).toFixed(1)}" x2="${W - R}" y2="${Y(1).toFixed(1)}" stroke="#2d3748" stroke-width="1"/>
+          <polyline points="${navPts}" fill="none" stroke="#63b3ed" stroke-width="2"/>
+          <circle cx="${X(n - 1).toFixed(1)}" cy="${Y(hist[n - 1].nav).toFixed(1)}" r="3" fill="#63b3ed"/>
+          <text x="${L - 5}" y="${(Y(1) + 3).toFixed(1)}" fill="#718096" font-size="10" text-anchor="end">0%</text>
+          <text x="${L - 5}" y="${T + 8}" fill="#718096" font-size="10" text-anchor="end">${pctL(vmax)}</text>
+          <text x="${L - 5}" y="${H - B}" fill="#718096" font-size="10" text-anchor="end">${pctL(vmin)}</text>
+          <text x="${L}" y="${H - 8}" fill="#718096" font-size="10">${hist[0].date.slice(5)}</text>
+          <text x="${W - R}" y="${H - 8}" fill="#718096" font-size="10" text-anchor="end">${hist[n - 1].date.slice(5)} (${pctL(hist[n - 1].nav)})</text>
+        </svg>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">
+          <span style="color:#63b3ed">━ 실현 NAV</span> ·
+          <span style="color:#718096">┅ 백테스트 페이스(연 ${paceAnnual}%) / 음영 ±1σ</span>
+          — CAGR·Sharpe 환산 근사, 시각 참고용 (게이트는 3개월 Sharpe 검사)
+        </div></div>`;
+      }
+
+      // Cumulative per-leg contribution (additive approximation, from tracker)
+      let attrHtml = '';
+      const at = pp.attribution;
+      if (at) {
+        const fv = v => `<span style="color:${v >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:600">${v >= 0 ? '+' : ''}${(v * 100).toFixed(2)}%p</span>`;
+        attrHtml = `<div style="font-size:12px;color:var(--muted);margin-top:8px">
+          누적 기여(단순합산 근사): 추세코어 ${fv(at.engine)} · 섹터 슬리브 ${fv(at.sleeve)} · 현금이자 ${fv(at.cash)} · 거래비용 ${fv(at.cost)}</div>`;
+      }
+
+      blendHtml = `
+        <div style="font-size:13px;margin-bottom:8px">
+          주력 블렌드 NAV 추적 <strong>${pp.nDays}일 / ${pp.months.toFixed(1)}개월</strong> (게이트 3개월) ·
+          상태 <strong style="color:${statusColor}">${pp.status}</strong>
+          <div style="background:#14181f;border-radius:6px;height:6px;margin-top:6px">
+            <div style="background:var(--amber);height:6px;border-radius:6px;width:${monthsBar}%"></div>
+          </div>
+        </div>
+        <table class="cand-table">
+          <thead><tr><th>누적(NAV)</th><th>연환산</th><th>실현 Sharpe</th><th>목표 Sharpe</th><th>MDD</th></tr></thead>
+          <tbody><tr>
+            <td style="color:${pp.totalReturn >= 0 ? 'var(--green)' : 'var(--red)'}">${pctS(pp.totalReturn)}</td>
+            <td>${pctS(pp.annReturn)}</td>
+            <td><strong>${pp.annSharpe.toFixed(2)}</strong>${pp.sharpeCi ? `<div style="font-size:10px;color:var(--muted);font-weight:400">95% CI ${pp.sharpeCi[0]}~${pp.sharpeCi[1]}</div>` : ''}</td>
+            <td style="color:var(--muted)">${pp.targetSharpe.toFixed(2)}</td>
+            <td style="color:var(--red)">${pctS(pp.mdd)}</td>
+          </tr></tbody>
+        </table>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">
+          Tier-2 게이트: ${chip(pp.monthsOk, '3개월+')} · ${chip(pp.sharpeOk, 'Sharpe≥0.5')} ·
+          ${chip(pp.driftOk, `백테스트 괴리<40%${pp.gap != null ? ` (현재 ${(pp.gap * 100).toFixed(0)}%)` : ''}`)} ·
+          ${pp.start || ''}부터 전향 추적(백필 없음).
+          ${pp.sharpeCi ? `Sharpe 신뢰구간(${pp.sharpeCi[0]}~${pp.sharpeCi[1]})이 게이트 밴드보다 넓은 동안의 괴리·review 판정은 통계적으로 노이즈일 수 있습니다 — 만기(3개월) 표본으로 판단.` : '짧은 표본의 Sharpe는 노이즈가 크므로 만기 전 수치는 참고용.'}
+        </div>
+        ${chartHtml}${attrHtml}`;
+    }
+    let fdHtml = '';
+    if (pm.n > 0 || pm.open > 0) {
+      const p = fd.percentile != null ? (fd.percentile * 100).toFixed(0) + '%' : '—';
+      const state = fd.isEntry ? '🔵 오늘 진입' : `대기 (공포 백분위 ${p})`;
+      fdHtml = `<div style="font-size:12px;color:var(--muted);margin-top:10px;border-top:1px solid #14181f;padding-top:8px">
+        공포매수(실험·페이퍼): ${state} · 청산 ${pm.n || 0}건 · 승률 ${((pm.winrate || 0) * 100).toFixed(0)}% · 누적 <span class="${(pm.total || 0) >= 0 ? 'pos' : 'neg'}">${((pm.total || 0) * 100).toFixed(1)}%</span> · 보유 ${pm.open || 0}건 — Holdout Sharpe 1.25 백테스트의 OOS 검증 트랙</div>`;
+    }
+    document.getElementById('validation-panel').innerHTML = `
+      <div class="panel" style="border:1px dashed var(--amber);background:transparent">
+        <div class="ttl"><span>🧪 검증 트랙 (실자본 아님)</span></div>
+        ${blendHtml}${fdHtml}
+      </div>`;
+  })();
+
+  // ── 5. 참고: 섹터·코어 모니터 (RSI-14 정렬 · 단일 표) ──────────────────────
+  // The old layout had TWO near-duplicate tables (confidence watchlist + RSI
+  // satellite) and a calibrated-probability column that printed ~57% on every
+  // row (the isotonic map is flat — the model can't rank names; showing the
+  // same number 9 times was noise). One table, no fake-precision columns.
+  (function () {
+    const cands = reg.candidates || [];
+    if (!cands.length) return;
+    const pickSet = new Set(sat.pick || []);
+    const distByTicker = {};
+    (sat.ranked || []).forEach(r => { distByTicker[r.ticker] = r.dist200Pct; });
+    const trendDot = c => (c.above200 ? (c.above50 ? '🟢' : '🟡') : '🔴');
+    const trendTxt = c => (c.above200 ? (c.above50 ? '상승' : '둔화') : '하락');
+    const rows = cands.map(c => {
+      const rsi = c.rsi != null ? c.rsi : null;
+      const dist = distByTicker[c.ticker];
+      return `<tr style="${pickSet.has(c.ticker) ? 'background:rgba(72,187,120,0.10)' : ''}">
+        <td>${pickSet.has(c.ticker) ? '★ ' : ''}${trendDot(c)} <strong>${c.ticker}</strong></td>
+        <td style="color:var(--muted)">${c.name}</td>
+        <td style="font-weight:700;color:${rsi != null && rsi >= 50 ? 'var(--green)' : 'var(--amber)'}">${rsi != null ? rsi.toFixed(0) : '—'}
+          ${rsi != null ? `<div class="rsi-bar"><div class="rsi-fill" style="width:${Math.max(0, Math.min(100, rsi)).toFixed(0)}%;background:${rsi >= 50 ? 'var(--green)' : 'var(--amber)'}"></div></div>` : ''}</td>
+        <td style="color:var(--muted)">${trendTxt(c)}</td>
+        <td style="color:var(--muted)">${dist != null ? (dist >= 0 ? '+' : '') + dist + '%' : '—'}</td>
+        <td>$${c.entry.toFixed(2)}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('monitor-panel').innerHTML = `
+      <div class="panel">
+        <div class="ttl"><span>섹터·코어 모니터 — RSI-14 내림차순 · ★ = 이번 주 슬리브 보유</span></div>
+        <table class="cand-table">
+          <thead><tr><th>종목</th><th>이름</th><th>RSI-14</th><th>추세(50/200)</th><th>200일선 이격</th><th>현재가</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
+          슬리브 선택 기준은 <strong>RSI-14 상위 2개 + 200일선 위</strong> (금요일 종가, 주 1회). 모델 확신도·보정승률 컬럼은 제거했습니다 —
+          확신도의 종목 변별력이 사실상 0(Spearman −0.02)이라 보정 승률이 전 종목 같은 값으로 평탄하게 나와, 종목 선택에 쓸 정보가 없기 때문입니다. 이 표는 관전용이며 매매 지시가 아닙니다.
+        </div>
+      </div>`;
+  })();
+
+  // ── 5b. 참고: 베스트픽 long-shot (연구 2026-06-24 · 라이브 블렌드와 별개) ───
+  // Concentrated SINGLE-name weekly pick from the expanded universe. Report-only
+  // reference like fear-dip — NOT the live instruction, NOT in telegram, does
+  // not move the paper-tracked blend. Both modes cleared Tier-1; +3%/wk is a
+  // take-profit TARGET, not an expected mean (full disclosure below).
+  (function () {
+    const bp = reg.bestPick || {};
+    const modes = [
+      { key: 'disciplined', label: 'disciplined (안정)', accent: 'var(--green)' },
+      { key: 'longshot',    label: 'longshot (고위험)', accent: 'var(--amber)' },
+    ];
+    const have = modes.filter(m => bp[m.key] && (bp[m.key].ranked || []).length);
+    if (!have.length) return;
+
+    const block = (m) => {
+      const r = bp[m.key] || {};
+      const bt = r.backtest || {};
+      const lev = (r.leverage > 1) ? ` <span style="color:${m.accent}">${r.leverage}x</span>` : '';
+      let head;
+      if (r.pick) {
+        head = `<div style="font-size:15px;font-weight:700;margin:2px 0 4px">
+            ▶ ${r.pick}${lev} <span style="color:var(--muted);font-weight:400;font-size:12px">${r.name || ''}</span></div>
+          <div style="font-size:12.5px;line-height:1.7">
+            진입 <strong>$${(r.entry||0).toFixed(2)}</strong>
+            → 목표(TP +3%) <strong style="color:var(--green)">$${(r.tp||0).toFixed(2)}</strong>
+            · 손절(200일선) <strong style="color:var(--red)">$${(r.stop||0).toFixed(2)}</strong>
+            <span style="color:var(--muted)">(여유 ${r.distStopPct}%)</span></div>
+          ${r.pickAsOf ? `<div style="font-size:11px;color:var(--muted)">선정: ${r.pickAsOf} 금요일 종가 · 주 1회 교체</div>` : ''}`;
+      } else {
+        head = `<div style="font-size:14px;font-weight:600;color:var(--muted);margin:2px 0 4px">▶ 현금 — ${r.note || '후보 없음'}</div>`;
+      }
+      const rows = (r.ranked || []).slice(0, 5).map(x => {
+        const lv = x.leverage > 1 ? `${x.leverage}x` : '';
+        const mark = (r.pick === x.ticker) ? '★ ' : '';
+        return `<tr style="${r.pick === x.ticker ? 'background:rgba(72,187,120,0.10)' : ''}">
+          <td>${mark}<strong>${x.ticker}</strong> <span style="color:var(--muted)">${lv}</span></td>
+          <td>${x.score.toFixed(2)}</td>
+          <td style="color:${x.above200 ? 'var(--green)' : 'var(--red)'}">${x.above200 ? '위' : '아래'} ${x.distStopPct != null ? (x.distStopPct >= 0 ? '+' : '') + x.distStopPct + '%' : ''}</td>
+        </tr>`;
+      }).join('');
+      return `<div style="flex:1 1 280px;min-width:260px;border:1px solid ${m.accent};border-radius:8px;padding:12px 14px">
+        <div style="font-size:12px;color:${m.accent};font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">
+          ${m.label} <span style="color:var(--muted);font-weight:400;text-transform:none">· ${bt.pool || ''}</span></div>
+        ${head}
+        <table class="cand-table" style="margin-top:8px">
+          <thead><tr><th>종목</th><th>점수(${bt.rank || ''})</th><th>200일선</th></tr></thead>
+          <tbody>${rows}</tbody></table>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">
+          검증(비용차감·look-ahead-safe): Full OOS <span class="pos">+${bt.fullRet}%</span>/Shp ${bt.fullSharpe}/MDD ${bt.fullMdd}% ·
+          Holdout +${bt.holdRet}%/${bt.holdSharpe}/${bt.holdMdd}% · 연도양수 ${bt.yearsPositive} · 2022 ${bt.bear2022Pct >= 0 ? '+' : ''}${bt.bear2022Pct}% · 게이트 ${bt.gate}<br>
+          <span style="color:var(--amber)">⚠️ 주간 +3%는 'TP 목표'지 평균 아님 — 실제 평균 +${bt.wkMeanPct}%/주, +3% 마감 주 ~${bt.wkHit3Pct}%, 최악 주 ${bt.wkWorstPct}%</span>
+        </div>
+      </div>`;
+    };
+
+    document.getElementById('bestpick-panel').innerHTML = `
+      <div class="panel" style="border:1px dashed var(--blue);background:transparent">
+        <div class="ttl"><span>🎯 베스트픽 long-shot — 단일 종목 주간 픽 (연구·참고)</span>
+          <span class="overall wait">라이브 아님 · 수동</span></div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap">${have.map(block).join('')}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;border-top:1px solid #14181f;padding-top:8px">
+          확장 유니버스(6섹터 / 6섹터+3x레버리지)에서 매주 RSI·모멘텀 1위 종목 1개를 집중 보유하는 연구 전략입니다.
+          <strong>라이브 블렌드(추세코어 85% + RSI 슬리브 15%)와 별개이며 텔레그램 지시에 포함되지 않습니다</strong> —
+          페이퍼 검증 중이라 실자본 구성은 그대로 유지됩니다. 게이트(SPY 200일선 ON + 픽 200일선 위, 아니면 현금)가 낙폭을 한도 내로 묶는 핵심.
+          실행은 본인 판단·수동. <code>python scripts/run_best_pick.py --live</code>로 최신 픽 재확인 가능.
+        </div>
+      </div>`;
+  })();
+
+  // ── 6. 참고: conviction 레짐 게이트 + 전략 정보 ────────────────────────────
+  (function () {
+    const gates = reg.gates || REPORT.gates || [];
+    if (!gates.length) return;
+    const strat = reg.strategy || REPORT.strategy || {};
+    const fmt = (v, f) => {
+      if (v === null || typeof v === 'undefined' || !isFinite(v)) return '—';
+      if (!f) return v.toFixed(2);
+      const m = String(f).match(/([+]?)([.](\d+))?f/);
+      const digits = m && m[3] ? parseInt(m[3]) : 2;
+      const sign = m && m[1] === '+' && v >= 0 ? '+' : '';
+      return sign + v.toFixed(digits);
+    };
+    const rows = gates.map(g => `<div class="gate-row">
+        <div><div class="gate-name">${g.name}</div><div class="gate-desc">${g.desc || ''}</div></div>
+        <div></div>
+        <div class="gate-val">${fmt(g.value, g.format)}<div class="thr">${g.op} ${fmt(g.threshold, g.format)}</div></div>
+        ${g.passed ? '<div class="gate-badge gate-pass">✓</div>' : '<div class="gate-badge gate-fail">✗</div>'}
+      </div>`).join('');
+    const allPass = gates.every(g => g.passed);
+    const passCount = gates.filter(g => g.passed).length;
+    const anyName = (reg.candidates || []).some(c => c.passed);
+    let overallCls, overallTxt;
+    if (!allPass) { overallCls = 'fail'; overallTxt = `✗ 레짐 ${passCount}/${gates.length} — 미발사`; }
+    else if (anyName) { overallCls = 'pass'; overallTxt = '✓ 레짐 + 종목 확신도 충족 — 발사'; }
+    else { overallCls = 'wait'; overallTxt = `⏳ 레짐 ${gates.length}/${gates.length} 통과 · 종목 확신도(0.65) 미달`; }
+    const stratTxt = strat.version
+      ? `${strat.version} · ${strat.description || ''} · Holdout WR ${(strat.holdout_wr * 100).toFixed(1)}% n=${strat.holdout_n} (Full ${(strat.full_wr * 100).toFixed(0)}% n=${strat.full_n}) — 주간 K=1 소표본`
+      : '';
+    document.getElementById('gates-panel').innerHTML = `
+      <div class="panel">
+        <div class="ttl"><span>conviction 레짐 게이트 (새틀라이트 신호의 1단 필터)</span>
+          <span class="overall ${overallCls}">${overallTxt}</span></div>
+        ${rows}
+        <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5;border-top:1px solid #14181f;padding-top:8px">
+          ${stratTxt ? stratTxt + '<br>' : ''}레짐 통과 후에도 종목별 확신도 ≥ 0.65가 필요해 매우 드물게만 발사됩니다. 발사 시 본문에 ⚡ 참고 신호 카드로 표시.
+        </div>
+      </div>`;
+  })();
+
+  // ── 7. 참고: 구모델 주간 캐리 페이퍼 (legacy) ──────────────────────────────
+  (function () {
+    const p = REPORT.paper || {};
+    const el = document.getElementById('legacy-paper');
+    if (!(p.n_trades > 0)) return;
+    let html = `
+      <div class="panel">
+        <div class="ttl"><span>구모델 주간 캐리 페이퍼 — 참고 기록 (현 주력 아님)</span></div>
+        <div class="paper-grid">
+          <div class="paper-stat"><div class="lbl">누적 수익</div>
+            <div class="val ${(p.total_return || 0) >= 0 ? 'pos' : 'neg'}">${((p.total_return || 0) * 100).toFixed(1)}%</div></div>
+          <div class="paper-stat"><div class="lbl">Sharpe</div><div class="val">${(p.sharpe || 0).toFixed(2)}</div></div>
+          <div class="paper-stat"><div class="lbl">MDD</div><div class="val neg">${((p.mdd || 0) * 100).toFixed(1)}%</div></div>
+          <div class="paper-stat"><div class="lbl">적중률</div><div class="val">${((p.winrate || 0) * 100).toFixed(1)}%</div></div>
+          <div class="paper-stat"><div class="lbl">손익비</div><div class="val">${(p.payoff || 0).toFixed(2)}</div></div>
+          <div class="paper-stat"><div class="lbl">거래</div><div class="val">${p.n_trades || 0}건</div></div>
+        </div>`;
+    if ((REPORT.paperOpen || []).length) {
+      const rows = REPORT.paperOpen.map(t =>
+        `<tr><td>${t.open_date}</td><td><strong>${t.ticker}</strong></td>
+         <td>$${t.entry_price.toFixed(2)}</td>
+         <td>${(t.ema_proba * 100).toFixed(0)}%</td>
+         <td>${(t.winrate * 100).toFixed(0)}% / ${t.payoff.toFixed(2)}</td></tr>`).join('');
+      html += `<table class="trade-table">
+          <tr><th>진입일</th><th>종목</th><th>진입가</th><th>신뢰도</th><th>WR / 손익비</th></tr>${rows}</table>`;
+    }
+    html += '</div>';
+    el.innerHTML = html;
+  })();
+})();
+
+function renderCard(s) {
+  const isInverse = s.dir === 'short';
+  const isLev = s.leverage > 1;
+  const cardCls = isLev ? 'leverage' : (isInverse ? 'inverse' : '');
+  const badgeCls = isLev ? 'lev-badge' : (isInverse ? 'short-badge' : 'long-badge');
+  const dirLabel = isLev
+    ? `⚡ ${isInverse ? 'INVERSE' : 'LONG'} ${s.leverage}x`
+    : (isInverse ? '↓ INVERSE' : '↑ LONG');
+
+  const factorRows = Object.entries(s.factors || {})
+    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+    .slice(0, 5)
+    .map(([k, v]) => {
+      const pct = Math.min(Math.abs(v) * 100, 100).toFixed(1);
+      return `<div class="factor-row">
+        <span class="factor-name">${k}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+        <span class="factor-val">${(v * 100).toFixed(1)}%</span>
+      </div>`;
+    }).join('');
+
+  return `<div class="signal-card ${cardCls}">
+    <div class="card-header">
+      <div>
+        <div class="ticker">${s.ticker}</div>
+        <div class="etf-name">${s.name || ''}</div>
+      </div>
+      <span class="dir-badge ${badgeCls}">${dirLabel}</span>
+    </div>
+    <div class="levels">
+      <div class="level"><div class="lbl">진입</div><div class="val">$${s.entry.toFixed(2)}</div></div>
+      <div class="level"><div class="lbl">익절 (TP)</div><div class="val" style="color:var(--green)">$${s.tp.toFixed(2)}</div></div>
+      <div class="level"><div class="lbl">손절 (SL)</div><div class="val" style="color:var(--red)">$${s.sl.toFixed(2)}</div></div>
+    </div>
+    <div class="stats">
+      <span>적중률 <strong>${(s.winrate * 100).toFixed(1)}%</strong></span>
+      <span>표본 <strong>${s.sampleN}일</strong> (CI: ${(s.ci[0] * 100).toFixed(1)}%–${(s.ci[1] * 100).toFixed(1)}%)</span>
+      <span>손익비 <strong>${s.payoff.toFixed(2)}</strong></span>
+      <span>기대값 <strong style="color:${s.expectancy >= 0 ? 'var(--green)' : 'var(--red)'}">
+        ${(s.expectancy * 100).toFixed(2)}%</strong></span>
+      <span>신뢰도 <strong>${(s.confidence * 100).toFixed(0)}%</strong></span>
+    </div>
+    ${factorRows ? `<div class="factors">${factorRows}</div>` : ''}
+  </div>`;
+}
+</script>
+</body>
+</html>
