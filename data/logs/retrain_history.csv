@@ -62,3 +62,4 @@ ts_utc,status,mean_oos_auc,min_oos_auc,n_rows,n_folds,reason,dry_run
 2026-08-11 15:04:58,PASS,0.5493,0.5129,32606,5,"mean OOS AUC 0.5493, min 0.5129, rows 32606",False
 2026-08-12 15:04:36,PASS,0.5487,0.5108,32606,5,"mean OOS AUC 0.5487, min 0.5108, rows 32606",False
 2026-08-14 14:58:31,PASS,0.5503,0.512,32623,5,"mean OOS AUC 0.5503, min 0.5120, rows 32623",False
+2026-08-17 14:35:19,PASS,0.5494,0.5033,32657,5,"mean OOS AUC 0.5494, min 0.5033, rows 32657",False
